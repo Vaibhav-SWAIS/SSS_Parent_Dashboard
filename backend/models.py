@@ -22,6 +22,28 @@ class StudentMaster(Base):
     
     class_info = relationship("ClassMaster")
 
+class ParentMaster(Base):
+    __tablename__ = "parent_master"
+    
+    parent_id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String)
+    email = Column(String, index=True)
+    phone = Column(String)
+    profile_image = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ParentStudentMap(Base):
+    __tablename__ = "parent_student_map"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    parent_id = Column(Integer, ForeignKey("parent_master.parent_id"), index=True)
+    student_id = Column(Integer, ForeignKey("student_master.student_id"), index=True)
+    relationship_type = Column(String)
+    
+    parent_info = relationship("ParentMaster")
+    student_info = relationship("StudentMaster")
+
 class TeacherMaster(Base):
     __tablename__ = "teacher_master"
     
@@ -125,11 +147,13 @@ class CallRequest(Base):
     __tablename__ = "call_requests"
 
     id = Column(Integer, primary_key=True, index=True)
+    parent_id = Column(Integer, ForeignKey("parent_master.parent_id"), index=True)
     student_id = Column(Integer, ForeignKey("student_master.student_id"), index=True)
     teacher_id = Column(Integer, ForeignKey("teacher_master.teacher_id"), nullable=True)
     message = Column(Text)
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    parent_info = relationship("ParentMaster")
     student_info = relationship("StudentMaster")
     teacher_info = relationship("TeacherMaster")

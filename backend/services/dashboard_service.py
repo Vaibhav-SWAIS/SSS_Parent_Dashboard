@@ -3,9 +3,9 @@ from fastapi import HTTPException
 from models import (
     StudentMaster, ClassMaster, AssignmentMaster, StudentSubmission, 
     QuizMaster, QuizResponse, TeacherParentInteractionV2, NoticeBoard, 
-    SubjectMaster, ChapterMaster, TeacherMaster
+    SubjectMaster, ChapterMaster, TeacherMaster, CallRequest
 )
-from schemas import DashboardResponse, StudentSchema, AssignmentSchema, QuizSchema, RemarkSchema, NoticeSchema
+from schemas import DashboardResponse, StudentSchema, AssignmentSchema, QuizSchema, RemarkSchema, NoticeSchema, CallRequestResponse
 from datetime import date, datetime
 
 def get_dashboard_data(db: Session, student_id: int):
@@ -37,7 +37,7 @@ def get_dashboard_data(db: Session, student_id: int):
     .join(SubjectMaster, ChapterMaster.subject_id == SubjectMaster.subject_id)\
     .outerjoin(StudentSubmission, (StudentSubmission.assignment_id == AssignmentMaster.assignment_id) & (StudentSubmission.student_id == student_id))\
     .filter(SubjectMaster.class_id == student.class_id)\
-    .order_by(AssignmentMaster.due_date.asc()).all()
+    .order_by(AssignmentMaster.due_date.desc()).all()
         
     assignment_list = []
     today = date.today()
@@ -144,10 +144,29 @@ def get_dashboard_data(db: Session, student_id: int):
             posted_by_name=teacher_name
         ))
 
+    # 6. Call Requests
+    call_requests_query = db.query(CallRequest, TeacherMaster.full_name)\
+        .outerjoin(TeacherMaster, CallRequest.teacher_id == TeacherMaster.teacher_id)\
+        .filter(CallRequest.student_id == student_id)\
+        .order_by(CallRequest.created_at.desc()).all()
+
+    call_req_list = []
+    for cr, teacher_name in call_requests_query:
+        cr_date_str = cr.created_at.strftime("%Y-%m-%d") if cr.created_at else ""
+        call_req_list.append(CallRequestResponse(
+            id=cr.id,
+            message=cr.message,
+            status=cr.status,
+            created_at=cr_date_str,
+            teacher_name=teacher_name
+        ))
+
+    # Limit lists for dashboard
     return DashboardResponse(
         student=student_data,
-        assignments=assignment_list,
-        quiz=quiz_list,
-        remarks=remark_list,
-        notices=notice_list
+        assignments=assignment_list[:4],
+        quiz=quiz_list[:4],
+        remarks=remark_list[:4],
+        notices=notice_list[:4],
+        call_requests=call_req_list[:4]
     )

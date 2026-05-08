@@ -40,6 +40,7 @@ class DashboardResponse(BaseModel):
     quiz: List[QuizSchema] = []
     remarks: List[RemarkSchema] = []
     notices: List[NoticeSchema] = []
+    call_requests: List['CallRequestResponse'] = []
 
 class TranslateRequest(BaseModel):
     text: str
@@ -49,7 +50,8 @@ class TranslateResponse(BaseModel):
     translated_text: str
     original_text: str
 
-class CallRequest(BaseModel):
+class CallRequestCreate(BaseModel):
+    parent_id: int
     student_id: int
     message: str
 
@@ -58,5 +60,15 @@ class CallRequestResponse(BaseModel):
     message: str
     status: str
     created_at: str
+    teacher_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class MappedChildSchema(BaseModel):
+    student_id: int
+    full_name: str
+    class_name: str
+    section: str
+
+    model_config = ConfigDict(from_attributes=True)
+

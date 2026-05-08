@@ -4,6 +4,7 @@ import { translateText } from '../lib/api';
 export default function RemarksCard({ remarks, currentLang }: { remarks: any[], currentLang: string }) {
   const [translatedRemarks, setTranslatedRemarks] = useState<any[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
 
   useEffect(() => {
     const translateAll = async () => {
@@ -34,6 +35,35 @@ export default function RemarksCard({ remarks, currentLang }: { remarks: any[], 
     translateAll();
   }, [remarks, currentLang]);
 
+  const handleSpeak = (text: string, index: number) => {
+    if (!('speechSynthesis' in window)) return;
+    
+    if (speakingIdx === index) {
+      window.speechSynthesis.cancel();
+      setSpeakingIdx(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    setSpeakingIdx(index);
+    
+    setTimeout(() => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      const langMap: Record<string, string> = { 'te': 'te-IN', 'hi': 'hi-IN', 'ta': 'ta-IN', 'kn': 'kn-IN', 'en': 'en-IN' };
+      utterance.lang = langMap[currentLang] || 'en-US';
+      
+      utterance.onend = () => setSpeakingIdx(null);
+      utterance.onerror = (e) => {
+        console.error("Speech error", e);
+        setSpeakingIdx(null);
+      };
+      
+      // Prevent GC bug in some browsers
+      (window as any).__utterance = utterance;
+      window.speechSynthesis.speak(utterance);
+    }, 50);
+  };
+
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full">
       <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
@@ -60,7 +90,7 @@ export default function RemarksCard({ remarks, currentLang }: { remarks: any[], 
             } catch(e) {}
             
             return (
-              <div key={index} className="p-4 bg-[#F9FAFB] rounded-xl border border-gray-100 hover:border-orange-200 transition-colors group">
+              <div key={index} className="p-4 bg-[#F9FAFB] rounded-xl border border-gray-100 hover:border-orange-200 transition-colors group relative">
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
@@ -70,9 +100,18 @@ export default function RemarksCard({ remarks, currentLang }: { remarks: any[], 
                   </div>
                   <span className="text-xs text-gray-400 font-medium">{formattedDate}</span>
                 </div>
-                <p className="text-sm text-gray-600 leading-relaxed italic border-l-2 border-orange-300 pl-3 ml-3 mt-2">
-                  &quot;{remark.translatedText}&quot;
-                </p>
+                <div className="flex items-start gap-2 mt-2">
+                  <p className="text-sm text-gray-600 leading-relaxed italic border-l-2 border-orange-300 pl-3 flex-1">
+                    &quot;{remark.translatedText}&quot;
+                  </p>
+                  <button 
+                    onClick={() => handleSpeak(remark.translatedText, index)}
+                    className={`shrink-0 p-2 rounded-full transition-colors ${speakingIdx === index ? 'bg-orange-100 text-orange-600 animate-pulse' : 'hover:bg-gray-200 text-gray-500'}`}
+                    title="Listen"
+                  >
+                    🔊
+                  </button>
+                </div>
               </div>
             );
           })}

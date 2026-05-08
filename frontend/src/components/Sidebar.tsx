@@ -1,16 +1,17 @@
+'use client';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 export default function Sidebar() {
+  const pathname = usePathname();
+  
   const menuItems = [
-    { name: 'Dashboard', icon: '🏠', path: '/parent/dashboard', active: true },
-    { name: 'Assignments', icon: '📄', path: '#', active: false },
-    { name: 'Quiz Performance', icon: '📊', path: '#', active: false },
-    { name: 'Teacher Remarks', icon: '💬', path: '#', active: false },
-    { name: 'Notices', icon: '🔔', path: '#', active: false },
-    { name: 'Communication', icon: '✉️', path: '#', active: false },
-    { name: 'Request Call', icon: '📞', path: '#', active: false },
-    { name: 'Profile', icon: '👤', path: '#', active: false },
-    { name: 'Settings', icon: '⚙️', path: '#', active: false },
+    { name: 'Dashboard', icon: '🏠', path: '/parent/dashboard' },
+    { name: 'Assignments', icon: '📄', path: '/parent/assignments' },
+    { name: 'Quiz Performance', icon: '📊', path: '/parent/quiz' },
+    { name: 'Teacher Remarks', icon: '💬', path: '/parent/remarks' },
+    { name: 'Notices', icon: '🔔', path: '/parent/notices' },
+    { name: 'Request Call', icon: '📞', path: '/parent/request-call' },
   ];
 
   return (
@@ -27,21 +28,24 @@ export default function Sidebar() {
       
       <nav className="flex-1 py-6">
         <ul className="space-y-2 px-4">
-          {menuItems.map((item, index) => (
-            <li key={index}>
-              <Link
-                href={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  item.active 
-                    ? 'bg-orange-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
-              >
-                <span>{item.icon}</span>
-                <span className="font-medium">{item.name}</span>
-              </Link>
-            </li>
-          ))}
+          {menuItems.map((item, index) => {
+            const isActive = pathname.startsWith(item.path);
+            return (
+              <li key={index}>
+                <Link
+                  href={item.path}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                    isActive 
+                      ? 'bg-orange-600 text-white' 
+                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  }`}
+                >
+                  <span>{item.icon}</span>
+                  <span className="font-medium">{item.name}</span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
 import models
-from routers import dashboard, translation, communication
+from routers import dashboard, translation
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +24,6 @@ app.add_middleware(
 # Include routers
 app.include_router(dashboard.router, tags=["Dashboard"])
 app.include_router(translation.router, tags=["Translation"])
-app.include_router(communication.router, tags=["Communication"])
 
 @app.get("/")
 def read_root():
