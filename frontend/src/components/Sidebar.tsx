@@ -11,7 +11,8 @@ export default function Sidebar() {
     { name: 'Quiz Performance', icon: '📊', path: '/parent/quiz' },
     { name: 'Teacher Remarks', icon: '💬', path: '/parent/remarks' },
     { name: 'Notices', icon: '🔔', path: '/parent/notices' },
-    { name: 'Request Call', icon: '📞', path: '/parent/request-call' },
+    { name: 'Analytics', icon: '📈', path: '/parent/analytics' },
+    { name: 'Communication Center', icon: '🏫', path: '/parent/communication' },
   ];
 
   return (

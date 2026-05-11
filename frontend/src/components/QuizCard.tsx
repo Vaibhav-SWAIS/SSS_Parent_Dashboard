@@ -10,7 +10,7 @@ export default function QuizCard({ quizzes }: { quizzes: any[] }) {
   }
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full">
+    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col h-[320px]">
       <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
         <h2 className="text-lg font-bold text-gray-800">Quiz Performance</h2>
         <button className="text-sm text-orange-600 hover:text-orange-700 font-medium">View All</button>
@@ -42,7 +42,7 @@ export default function QuizCard({ quizzes }: { quizzes: any[] }) {
         </div>
       )}
       
-      <div className="mt-auto pt-4 border-t border-orange-100 bg-orange-50/50 -mx-6 -mb-6 p-6 rounded-b-xl flex justify-between items-center">
+      <div className="mt-auto pt-4 border-t border-orange-100 bg-orange-50/50 -mx-6 -mb-6 p-4 rounded-b-xl flex justify-between items-center">
         <span className="text-sm font-semibold text-gray-700">Average Score</span>
         <span className="text-orange-600 font-bold text-lg">{validQuizzes.length > 0 ? `${avgScore} / ${avgTotal}` : '--'}</span>
       </div>

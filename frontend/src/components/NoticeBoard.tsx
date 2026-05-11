@@ -66,7 +66,7 @@ export default function NoticeBoard({ notices, currentLang = 'en' }: { notices: 
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full">
+    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col h-[320px]">
       <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-2">
         <div className="flex items-center gap-2">
           <span className="text-orange-500 text-xl">📢</span>
@@ -84,7 +84,7 @@ export default function NoticeBoard({ notices, currentLang = 'en' }: { notices: 
           <p className="text-gray-500 italic">No notices available</p>
         </div>
       ) : (
-        <div className="space-y-4 flex-1">
+        <div className="space-y-3 flex-1 overflow-y-auto pr-1">
           {translatedNotices.map((notice, idx) => {
             let formattedDate = notice.date;
             try {

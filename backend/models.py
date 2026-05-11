@@ -105,6 +105,7 @@ class QuizMaster(Base):
     title = Column(String)
     total_marks = Column(Float)
     duration_minutes = Column(Integer)
+    created_at = Column(TIMESTAMP, default=datetime.utcnow)
     
     chapter_info = relationship("ChapterMaster")
 
@@ -123,11 +124,14 @@ class NoticeBoard(Base):
     __tablename__ = "notice_board"
     
     notice_id = Column(Integer, primary_key=True, index=True)
-    title = Column(String)
-    content = Column(Text)
-    class_id = Column(Integer, ForeignKey("class_master.class_id"), index=True)
+    notice_title = Column(String(200))
+    notice_text = Column(Text)
+    notice_date = Column(Date)
+    applicable_class = Column(String(50))
     posted_by = Column(Integer, ForeignKey("teacher_master.teacher_id"))
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
+
+    teacher_info = relationship("TeacherMaster")
 
 class TeacherParentInteractionV2(Base):
     __tablename__ = "teacher_parent_interaction_v2"
@@ -157,3 +161,83 @@ class CallRequest(Base):
     parent_info = relationship("ParentMaster")
     student_info = relationship("StudentMaster")
     teacher_info = relationship("TeacherMaster")
+
+class AttendanceMaster(Base):
+    __tablename__ = "attendance_master"
+
+    attendance_id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("student_master.student_id"), index=True)
+    class_id = Column(Integer, ForeignKey("class_master.class_id"), index=True)
+    attendance_date = Column(Date)
+    status = Column(String) # Present, Absent, Late
+    academic_year = Column(String)
+
+    student_info = relationship("StudentMaster")
+
+class SchoolEvent(Base):
+    __tablename__ = "school_events"
+
+    event_id = Column(Integer, primary_key=True, index=True)
+    title = Column(String)
+    description = Column(Text)
+    event_date = Column(Date)
+    class_id = Column(Integer, ForeignKey("class_master.class_id"), nullable=True)
+    academic_year = Column(String)
+    event_type = Column(String) # Exam, Holiday, PTM, Activity
+
+class ChatThread(Base):
+    __tablename__ = "chat_threads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    parent_id = Column(Integer, ForeignKey("parent_master.parent_id"), index=True)
+    teacher_id = Column(Integer, ForeignKey("teacher_master.teacher_id"), index=True)
+    student_id = Column(Integer, ForeignKey("student_master.student_id"), index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    parent_info = relationship("ParentMaster")
+    teacher_info = relationship("TeacherMaster")
+    student_info = relationship("StudentMaster")
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    thread_id = Column(Integer, ForeignKey("chat_threads.id"), index=True)
+    sender_type = Column(String) # 'parent' or 'teacher'
+    sender_id = Column(Integer)
+    message = Column(Text)
+    translated_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_read = Column(Boolean, default=False)
+    
+    thread_info = relationship("ChatThread")
+
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    ticket_id = Column(Integer, primary_key=True, index=True)
+    ticket_number = Column(String, unique=True, index=True)
+    parent_id = Column(Integer, ForeignKey("parent_master.parent_id"), index=True)
+    student_id = Column(Integer, ForeignKey("student_master.student_id"), index=True)
+    subject = Column(String)
+    category = Column(String)
+    priority = Column(String)
+    status = Column(String, default="OPEN")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    parent_info = relationship("ParentMaster")
+    student_info = relationship("StudentMaster")
+
+class TicketMessage(Base):
+    __tablename__ = "ticket_messages"
+
+    message_id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("support_tickets.ticket_id"), index=True)
+    sender_type = Column(String)
+    sender_name = Column(String)
+    message = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_read = Column(Boolean, default=False)
+
+    ticket_info = relationship("SupportTicket")

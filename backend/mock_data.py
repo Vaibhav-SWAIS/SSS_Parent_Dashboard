@@ -7,7 +7,8 @@ from models import (
     ClassMaster, StudentMaster, TeacherMaster, SubjectMaster,
     ChapterMaster, AssignmentMaster, StudentSubmission, QuizMaster,
     QuizResponse, NoticeBoard, TeacherParentInteractionV2,
-    ParentMaster, ParentStudentMap, CallRequest
+    ParentMaster, ParentStudentMap, CallRequest,
+    AttendanceMaster, SchoolEvent, ChatThread, ChatMessage
 )
 
 def seed_data():
@@ -221,6 +222,54 @@ def seed_data():
                 cr.created_at = datetime.now() - timedelta(days=days_ago)
                 db.add(cr)
             db.commit()
+
+            # Attendance (Past 30 days)
+            for i in range(30):
+                att_date = today - timedelta(days=i)
+                if att_date.weekday() >= 5: continue
+                status = random.choices(["Present", "Absent", "Late"], weights=[0.85, 0.1, 0.05])[0]
+                db.add(AttendanceMaster(
+                    student_id=s.student_id, class_id=s.class_id,
+                    attendance_date=att_date, status=status, academic_year="2025-26"
+                ))
+            db.commit()
+
+            # Chat Threads & Messages
+            if student_parents:
+                for parent in student_parents:
+                    for t in random.sample(teachers, 2):
+                        thread = ChatThread(parent_id=parent.parent_id, teacher_id=t.teacher_id, student_id=s.student_id)
+                        thread.created_at = datetime.now() - timedelta(days=random.randint(10, 30))
+                        db.add(thread)
+                        db.commit()
+                        
+                        msg_time = thread.created_at
+                        for _ in range(random.randint(3, 5)):
+                            msg_time += timedelta(hours=random.randint(1, 12))
+                            sender_type = random.choice(["parent", "teacher"])
+                            sender_id = parent.parent_id if sender_type == "parent" else t.teacher_id
+                            is_read = random.choice([True, False]) if sender_type == "teacher" else True
+                            
+                            msg = ChatMessage(
+                                thread_id=thread.id, sender_type=sender_type, sender_id=sender_id,
+                                message=f"This is a {sender_type} message about progress.",
+                                created_at=msg_time, is_read=is_read
+                            )
+                            db.add(msg)
+                        db.commit()
+
+        # Events
+        event_templates = [
+            ("Science Fair", "Annual science exhibition.", "Activity"),
+            ("Mid-Term Exams", "Half-yearly examinations.", "Exam"),
+            ("Winter Break", "School closed for winter.", "Holiday"),
+            ("Parent Teacher Meeting", "Mandatory PTM for all.", "PTM"),
+            ("Sports Day", "Annual sports competition.", "Activity")
+        ]
+        for title, desc, etype in event_templates:
+            ev_date = today + timedelta(days=random.randint(5, 60))
+            db.add(SchoolEvent(title=title, description=desc, event_date=ev_date, academic_year="2025-26", event_type=etype))
+        db.commit()
 
         print("Large Database seeded successfully.")
     except Exception as e:

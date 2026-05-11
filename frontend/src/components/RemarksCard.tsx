@@ -65,7 +65,7 @@ export default function RemarksCard({ remarks, currentLang }: { remarks: any[], 
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full">
+    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col h-[320px]">
       <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
         <h2 className="text-lg font-bold text-gray-800">Teacher Remarks</h2>
         {isTranslating ? (
@@ -80,7 +80,7 @@ export default function RemarksCard({ remarks, currentLang }: { remarks: any[], 
           <p className="text-gray-500 italic">No remarks available</p>
         </div>
       ) : (
-        <div className="space-y-4 flex-1">
+        <div className="space-y-3 flex-1 overflow-y-auto pr-1">
           {translatedRemarks.map((remark, index) => {
             let formattedDate = remark.date;
             try {
