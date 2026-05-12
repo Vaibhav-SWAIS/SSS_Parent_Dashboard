@@ -1,3 +1,11 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — AcademicHealthWidget
+// Was: displayed an "Academic Health" status card (Good/Average/Needs Attention)
+// on the old dashboard, driven by AcademicHealthSchema.
+// Removed during: dashboard redesign (fake-data cleanup).
+// Not imported by: any page or component.
+// Restore: import in dashboard/page.tsx and pass data?.academic_health prop.
+// ════════════════════════════════════════════════════════════════════════════
 'use client';
 import Link from 'next/link';
 

@@ -70,12 +70,53 @@ class NoticeSchema(BaseModel):
     applicable_class: str
     posted_by_name: str
 
-class ChatMessageCreate(BaseModel):
-    thread_id: int
-    sender_type: str
-    sender_id: int
-    message: str
-    translated_message: Optional[str] = None
+# ── DISABLED: Old chat system schemas ─────────────────────────────────────
+# These belonged to the /chat/ thread-based messaging system (ChatThread +
+# ChatMessage models). That system was replaced by the /comm/ Communication
+# Center (SupportTicket + TicketMessage repurposed). Safe to restore if
+# the old chat system is ever revived.
+#
+# class ChatMessageCreate(BaseModel):
+#     thread_id: int
+#     sender_type: str
+#     sender_id: int
+#     message: str
+#     translated_message: Optional[str] = None
+#
+# class ChatMessageSchema(BaseModel):
+#     id: int
+#     thread_id: int
+#     sender_type: str
+#     sender_id: int
+#     message: str
+#     translated_message: Optional[str] = None
+#     created_at: str
+#     is_read: bool
+#
+# class ChatThreadSchema(BaseModel):
+#     id: int
+#     teacher_id: int
+#     teacher_name: str
+#     student_id: int
+#     student_name: str
+#     created_at: str
+#     latest_message: Optional[ChatMessageSchema] = None
+#     unread_count: int = 0
+# ──────────────────────────────────────────────────────────────────────────
+
+# ── DISABLED: Communication timeline schema ────────────────────────────────
+# Used by GET /communication/timeline/{student_id} which has no frontend
+# caller. The new Communication Center uses /comm/ routes instead.
+# Restore if a timeline view is added back to the frontend.
+#
+# class TimelineItemSchema(BaseModel):
+#     id: str
+#     type: str # "Announcement", "PTM Request", "Parent Note", "Teacher Remark"
+#     title: str
+#     message: str
+#     date: str
+#     author: str
+# ──────────────────────────────────────────────────────────────────────────
 
 class EventSchema(BaseModel):
     title: str
@@ -128,11 +169,11 @@ class AttendanceTrendSchema(BaseModel):
     monthly_data: List[dict] # { "month": "Jan", "present": 20, "absent": 2 }
 
 class AlertSchema(BaseModel):
-    type: str # warning, info, success, error
+    type: str  # warning, info, success, error
     message: str
+    priority: Optional[str] = None   # HIGH, MEDIUM, LOW
     subject: Optional[str] = None
     due: Optional[str] = None
-    priority: Optional[str] = None
 
 class AcademicHealthSchema(BaseModel):
     status: str
@@ -149,41 +190,50 @@ class DeadlineSchema(BaseModel):
     due_date: str
     days_left: int
 
-class TicketMessageSchema(BaseModel):
-    message_id: int
-    ticket_id: int
-    sender_type: str
-    sender_name: str
-    message: str
-    created_at: str
-    is_read: bool
-
-class SupportTicketSchema(BaseModel):
-    ticket_id: int
-    ticket_number: str
-    parent_id: int
-    student_id: int
-    subject: str
-    category: str
-    priority: str
-    status: str
-    created_at: str
-    updated_at: str
-    latest_message: Optional[TicketMessageSchema] = None
-
-class TicketCreateSchema(BaseModel):
-    parent_id: int
-    student_id: int
-    subject: str
-    category: str
-    priority: str
-    message: str
-
-class TicketMessageCreateSchema(BaseModel):
-    ticket_id: int
-    sender_type: str
-    sender_name: str
-    message: str
+# ── DISABLED: Old support-ticket API schemas ───────────────────────────────
+# These served the /tickets/ CRUD routes (GET /tickets/{parent_id}/{student_id},
+# POST /tickets, GET /tickets/{ticket_id}/messages, etc.) which were the
+# original customer-support style system. That system was replaced by the
+# /comm/ Communication Center. The underlying DB tables (support_tickets,
+# ticket_messages) are still active — repurposed by the /comm/ router.
+# Restore these schemas if the old /tickets/ routes are ever re-enabled.
+#
+# class TicketMessageSchema(BaseModel):
+#     message_id: int
+#     ticket_id: int
+#     sender_type: str
+#     sender_name: str
+#     message: str
+#     created_at: str
+#     is_read: bool
+#
+# class SupportTicketSchema(BaseModel):
+#     ticket_id: int
+#     ticket_number: str
+#     parent_id: int
+#     student_id: int
+#     subject: str
+#     category: str
+#     priority: str
+#     status: str
+#     created_at: str
+#     updated_at: str
+#     latest_message: Optional[TicketMessageSchema] = None
+#
+# class TicketCreateSchema(BaseModel):
+#     parent_id: int
+#     student_id: int
+#     subject: str
+#     category: str
+#     priority: str
+#     message: str
+#
+# class TicketMessageCreateSchema(BaseModel):
+#     ticket_id: int
+#     sender_type: str
+#     sender_name: str
+#     message: str
+# ──────────────────────────────────────────────────────────────────────────
 
 class NotificationSchema(BaseModel):
     id: str
@@ -207,6 +257,11 @@ class ClassRankSchema(BaseModel):
     percentile: str
     description: str
 
+class SubjectPerformanceData(BaseModel):
+    subject: str
+    score: float
+    class_average: float
+
 class DashboardResponse(BaseModel):
     student: StudentSchema
     assignments: List[AssignmentSchema] = []
@@ -216,6 +271,7 @@ class DashboardResponse(BaseModel):
     call_requests: List['CallRequestResponse'] = []
     attendance_trend: Optional[AttendanceTrendSchema] = None
     performance_summary: Optional[PerformanceSummarySchema] = None
+    subject_performance: List[SubjectPerformanceData] = []
     upcoming_events: List[EventSchema] = []
     daily_summary: Optional[DailySummarySchema] = None
     alerts: List[AlertSchema] = []
@@ -229,23 +285,24 @@ class DashboardResponse(BaseModel):
     attendance_heat: Optional[str] = None
     weekly_progress: Optional[WeeklyProgressSchema] = None
     class_rank: Optional[ClassRankSchema] = None
-    notifications: List[NotificationSchema] = []
-    subject_performance: List['SubjectPerformanceData'] = []
+    notifications: List['NotificationSchema'] = []
 
-class SubjectPerformanceData(BaseModel):
-    subject: str
-    score: float
-    class_average: float
-
-class AnalyticsResponse(BaseModel):
-    student: StudentSchema
-    subject_performance: List[SubjectPerformanceData]
-    monthly_trends: List[dict]
-    assignment_completion: dict
-    attendance_heatmap: List[dict]
-    strongest_subject: str
-    weakest_subject: str
-    growth_percent: str
+# ── DISABLED: Analytics module response schema ─────────────────────────────
+# Used by GET /analytics/{student_id} and analytics_service.py. The entire
+# Analytics page (/parent/analytics) was removed from the frontend. The
+# backend route is also disabled. Restore both if an analytics module is
+# re-introduced. analytics_service.py is preserved on disk as a reference.
+#
+# class AnalyticsResponse(BaseModel):
+#     student: StudentSchema
+#     subject_performance: List[SubjectPerformanceData]
+#     monthly_trends: List[dict]
+#     assignment_completion: dict
+#     attendance_heatmap: List[dict]
+#     strongest_subject: str
+#     weakest_subject: str
+#     growth_percent: str
+# ──────────────────────────────────────────────────────────────────────────
 
 class TranslateRequest(BaseModel):
     text: str
@@ -276,4 +333,87 @@ class MappedChildSchema(BaseModel):
     section: str
 
     model_config = ConfigDict(from_attributes=True)
+
+# ── Attendance Module ──────────────────────────────────────────────────────
+
+class AttendanceDaySchema(BaseModel):
+    date: str
+    status: str  # Present, Absent, HalfDay, Holiday
+
+class AttendanceOverviewSchema(BaseModel):
+    percentage: float
+    present_days: int
+    absent_days: int
+    half_days: int
+    total_school_days: int
+
+class AttendanceDataResponse(BaseModel):
+    overview: AttendanceOverviewSchema
+    records: List[AttendanceDaySchema]
+
+class LeaveRequestCreate(BaseModel):
+    student_id: int
+    parent_id: int
+    from_date: date
+    to_date: date
+    reason: str
+    parent_note: Optional[str] = None
+
+class LeaveRequestResponse(BaseModel):
+    leave_request_id: int
+    student_id: int
+    from_date: str
+    to_date: str
+    reason: str
+    parent_note: Optional[str] = None
+    status: str
+    created_at: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+class LeaveStatusUpdate(BaseModel):
+    status: str  # Approved or Rejected
+    reviewed_by: int
+
+# ── Communication Module ───────────────────────────────────────────────────
+
+class TeacherOptionSchema(BaseModel):
+    teacher_id: Optional[int] = None
+    name: str
+    role: str
+
+class ConversationSummarySchema(BaseModel):
+    conv_id: int
+    subject: str
+    category: str
+    recipient_name: str
+    status: str
+    created_at: str
+    updated_at: str
+    latest_message: Optional[str] = None
+    latest_message_time: Optional[str] = None
+    latest_sender: Optional[str] = None
+    unread_count: int = 0
+
+class ConversationMessageSchema(BaseModel):
+    message_id: int
+    conv_id: int
+    sender_type: str   # PARENT or TEACHER
+    sender_name: str
+    message: str
+    created_at: str
+    is_read: bool
+
+class CreateConversationSchema(BaseModel):
+    student_id: int
+    parent_id: int
+    subject: str
+    category: str
+    recipient_name: str
+    first_message: str
+
+class SendConversationMessageSchema(BaseModel):
+    sender_type: str   # PARENT or TEACHER
+    sender_name: str
+    message: str
 

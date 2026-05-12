@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — PerformanceSummaryWidget
+// Was: a standalone performance summary card on the old dashboard.
+// Dashboard redesign renders this inline within a SectionCard.
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 'use client';
 
 export default function PerformanceSummaryWidget({ data }: { data: any }) {

@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — RecentAnnouncementsWidget
+// Was: showed recent school notices/announcements on the old dashboard.
+// Dashboard redesign surfaces notices through the notifications feed and the
+// dedicated /parent/notices page. Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 import React from 'react';
 import { MegaphoneIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';

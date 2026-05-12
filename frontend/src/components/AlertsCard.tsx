@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — AlertsCard
+// Was: a standalone "Action Required" alerts card on the old dashboard.
+// Dashboard redesign renders alerts inline within a SectionCard with
+// AlertPill sub-component. Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 'use client';
 
 export default function AlertsCard({ alerts }: { alerts: any[] }) {

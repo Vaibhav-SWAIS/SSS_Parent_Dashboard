@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — ClassRankWidget
+// Was: displayed "Top N% in class" rank card, driven by ClassRankSchema.
+// Removed during: dashboard redesign (fake-percentile data removed).
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 import React from 'react';
 import { TrophyIcon } from '@heroicons/react/24/solid';
 

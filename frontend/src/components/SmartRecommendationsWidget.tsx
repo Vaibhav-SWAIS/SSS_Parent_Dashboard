@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — SmartRecommendationsWidget
+// Was: a standalone card showing rule-based recommendations on the old
+// dashboard. Dashboard redesign renders recommendations inline.
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 import React from 'react';
 import { LightBulbIcon } from '@heroicons/react/24/outline';
 import { ChevronRightIcon } from '@heroicons/react/20/solid';

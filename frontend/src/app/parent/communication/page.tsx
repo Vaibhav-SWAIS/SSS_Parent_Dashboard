@@ -1,161 +1,510 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import TopBar from '@/components/TopBar';
-import { fetchTickets, createTicket, fetchTicketMessages, createTicketMessage } from '@/lib/api';
 import { useDashboard } from '@/lib/DashboardContext';
-import { MagnifyingGlassIcon, PlusIcon, ChatBubbleLeftRightIcon, XMarkIcon, PaperAirplaneIcon } from '@heroicons/react/24/outline';
+import {
+  fetchConversations,
+  fetchConversationMessages,
+  sendConversationMessage,
+  createConversation,
+  fetchConversationRecipients,
+} from '@/lib/api';
+import {
+  ChatBubbleLeftRightIcon,
+  PlusIcon,
+  MagnifyingGlassIcon,
+  PaperAirplaneIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline';
 
-export default function CommunicationCenterPage() {
-  const { studentId, setStudentId, language, setLanguage } = useDashboard();
-  const [tickets, setTickets] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  
-  const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
-  const [replyMessage, setReplyMessage] = useState('');
-  
-  const [filter, setFilter] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [newSubject, setNewSubject] = useState('');
-  const [newCategory, setNewCategory] = useState('Academic');
-  const [newPriority, setNewPriority] = useState('MEDIUM');
-  const [newMessage, setNewMessage] = useState('');
+// ── Types ─────────────────────────────────────────────────────────────────
 
-  const loadTickets = async () => {
-    setIsLoading(true);
+interface Conversation {
+  conv_id: number;
+  subject: string;
+  category: string;
+  recipient_name: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  latest_message: string | null;
+  latest_message_time: string | null;
+  latest_sender: string | null;
+  unread_count: number;
+}
+
+interface Message {
+  message_id: number;
+  conv_id: number;
+  sender_type: string;   // PARENT | TEACHER
+  sender_name: string;
+  message: string;
+  created_at: string;
+  is_read: boolean;
+}
+
+interface Recipient {
+  teacher_id: number | null;
+  name: string;
+  role: string;
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────
+
+const CATEGORIES = [
+  'Academic',
+  'Attendance',
+  'Homework',
+  'Behavior',
+  'Exam / Test',
+  'Transport',
+  'Fees',
+  'General Enquiry',
+  'PTM Request',
+  'Leave Clarification',
+];
+
+const CATEGORY_COLOR: Record<string, string> = {
+  'Academic':          'bg-blue-100 text-blue-700',
+  'Attendance':        'bg-yellow-100 text-yellow-700',
+  'Homework':          'bg-purple-100 text-purple-700',
+  'Behavior':          'bg-orange-100 text-orange-700',
+  'Exam / Test':       'bg-red-100 text-red-600',
+  'Transport':         'bg-teal-100 text-teal-700',
+  'Fees':              'bg-green-100 text-green-700',
+  'General Enquiry':   'bg-gray-100 text-gray-600',
+  'PTM Request':       'bg-pink-100 text-pink-700',
+  'Leave Clarification':'bg-indigo-100 text-indigo-700',
+};
+
+const FILTER_TABS = ['All', 'Unread', 'Academic', 'Attendance', 'General Enquiry'];
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins  = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days  = Math.floor(diff / 86400000);
+    if (mins < 1)   return 'Just now';
+    if (mins < 60)  return `${mins}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7)   return `${days}d ago`;
+    return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  } catch { return ''; }
+}
+
+function msgTime(iso: string): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const sameDay =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+    if (sameDay) return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) +
+      ' · ' +
+      d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  } catch { return ''; }
+}
+
+function initials(name: string): string {
+  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+}
+
+function categoryBadge(cat: string) {
+  const cls = CATEGORY_COLOR[cat] ?? 'bg-gray-100 text-gray-600';
+  return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cls}`}>{cat}</span>;
+}
+
+// ── Conversation List Item ─────────────────────────────────────────────────
+
+function ConvItem({
+  conv, selected, onClick,
+}: {
+  conv: Conversation; selected: boolean; onClick: () => void;
+}) {
+  const isParentLast = conv.latest_sender === 'PARENT';
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-3 py-3 rounded-xl transition-all border ${
+        selected
+          ? 'bg-orange-50 border-orange-200'
+          : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-100'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        {/* Avatar */}
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-xs font-black shrink-0 mt-0.5">
+          {initials(conv.recipient_name)}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between items-center gap-1">
+            <p className="text-sm font-semibold text-gray-900 truncate">{conv.recipient_name}</p>
+            <span className="text-[10px] text-gray-400 shrink-0">{timeAgo(conv.latest_message_time ?? conv.updated_at)}</span>
+          </div>
+          <p className="text-xs text-gray-500 truncate mt-0.5">{conv.subject}</p>
+          <div className="flex items-center justify-between mt-1 gap-2">
+            <p className={`text-[11px] truncate flex-1 ${conv.unread_count > 0 ? 'font-semibold text-gray-800' : 'text-gray-400'}`}>
+              {isParentLast ? 'You: ' : ''}{conv.latest_message ?? 'No messages yet'}
+            </p>
+            {conv.unread_count > 0 && (
+              <span className="w-4 h-4 rounded-full bg-orange-500 text-white text-[9px] font-black flex items-center justify-center shrink-0">
+                {conv.unread_count}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ── Message Bubble ─────────────────────────────────────────────────────────
+
+function MessageBubble({ msg }: { msg: Message }) {
+  const isParent = msg.sender_type === 'PARENT';
+  return (
+    <div className={`flex flex-col ${isParent ? 'items-end' : 'items-start'} mb-4`}>
+      {/* Sender label */}
+      <div className={`flex items-center gap-1.5 mb-1 ${isParent ? 'flex-row-reverse' : ''}`}>
+        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black text-white shrink-0 ${isParent ? 'bg-gray-700' : 'bg-orange-500'}`}>
+          {initials(msg.sender_name)}
+        </div>
+        <span className="text-[11px] font-semibold text-gray-500">{msg.sender_name}</span>
+        <span className="text-[10px] text-gray-300">·</span>
+        <span className="text-[10px] text-gray-400">{msgTime(msg.created_at)}</span>
+      </div>
+
+      {/* Bubble */}
+      <div
+        className={`max-w-[78%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+          isParent
+            ? 'bg-gray-800 text-white rounded-tr-sm'
+            : 'bg-orange-50 text-gray-800 border border-orange-100 rounded-tl-sm'
+        }`}
+      >
+        <p className="whitespace-pre-wrap">{msg.message}</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Start Conversation Modal ────────────────────────────────────────────────
+
+function NewConversationModal({
+  studentId,
+  recipients,
+  onClose,
+  onCreate,
+}: {
+  studentId: number;
+  recipients: Recipient[];
+  onClose: () => void;
+  onCreate: (conv: Conversation) => void;
+}) {
+  const [step, setStep]             = useState<1 | 2>(1);
+  const [recipient, setRecipient]   = useState<Recipient | null>(null);
+  const [category, setCategory]     = useState('Academic');
+  const [subject, setSubject]       = useState('');
+  const [firstMsg, setFirstMsg]     = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError]           = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recipient || !subject.trim() || !firstMsg.trim()) {
+      setError('Please fill all fields.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
     try {
-      // Mock parent_id = 1
-      const data = await fetchTickets(1, studentId);
-      setTickets(data);
-    } catch (err) {
-      console.error(err);
+      const conv = await createConversation({
+        student_id:     studentId,
+        parent_id:      1,
+        subject:        subject.trim(),
+        category,
+        recipient_name: recipient.name,
+        first_message:  firstMsg.trim(),
+      });
+      onCreate(conv);
+    } catch {
+      setError('Failed to start conversation. Please try again.');
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (studentId) {
-      loadTickets();
-      setSelectedTicket(null);
-    }
-  }, [studentId]);
-
-  useEffect(() => {
-    if (selectedTicket) {
-      const loadMessages = async () => {
-        setIsMessagesLoading(true);
-        try {
-          const data = await fetchTicketMessages(selectedTicket.ticket_id);
-          setMessages(data);
-        } catch (err) {
-          console.error(err);
-        } finally {
-          setIsMessagesLoading(false);
-        }
-      };
-      loadMessages();
-    }
-  }, [selectedTicket]);
-
-  const handleCreateTicket = async (e: any) => {
-    e.preventDefault();
-    try {
-      const newTicket = await createTicket(1, studentId, newSubject, newCategory, newPriority, newMessage);
-      setTickets([newTicket, ...tickets]);
-      setShowNewModal(false);
-      setNewSubject('');
-      setNewMessage('');
-      setSelectedTicket(newTicket);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleReply = async (e: any) => {
-    e.preventDefault();
-    if (!replyMessage.trim() || !selectedTicket) return;
-    try {
-      const msg = await createTicketMessage(selectedTicket.ticket_id, "PARENT", "Parent", replyMessage);
-      setMessages([...messages, msg]);
-      setReplyMessage('');
-      // Update local ticket status
-      const updatedTickets = tickets.map(t => t.ticket_id === selectedTicket.ticket_id ? {...t, status: 'OPEN', updated_at: new Date().toISOString()} : t);
-      setTickets(updatedTickets);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const filteredTickets = tickets.filter(t => {
-    if (filter === 'Open' && t.status !== 'OPEN' && t.status !== 'IN_PROGRESS') return false;
-    if (filter === 'Resolved' && t.status !== 'RESOLVED' && t.status !== 'CLOSED') return false;
-    if (filter === 'High Priority' && t.priority !== 'HIGH') return false;
-    if (searchQuery && !t.subject.toLowerCase().includes(searchQuery.toLowerCase()) && !t.ticket_number.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
-  });
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'OPEN': return 'bg-blue-100 text-blue-700';
-      case 'IN_PROGRESS': return 'bg-orange-100 text-orange-700';
-      case 'AWAITING_PARENT': return 'bg-yellow-100 text-yellow-700';
-      case 'RESOLVED': return 'bg-green-100 text-green-700';
-      case 'CLOSED': return 'bg-gray-100 text-gray-700';
-      default: return 'bg-gray-100 text-gray-700';
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-full flex flex-col bg-[#F9FAFB] text-gray-800 font-sans h-screen">
-      <TopBar 
-        studentId={studentId} 
-        setStudentId={setStudentId} 
-        language={language} 
-        setLanguage={setLanguage} 
-        isLoading={isLoading} 
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        {/* Header */}
+        <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="font-bold text-gray-900">Start a Conversation</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Reach out to a teacher or school department</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Step 1: Select recipient */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-2">
+              Who would you like to contact?
+            </label>
+            <div className="max-h-44 overflow-y-auto space-y-1.5 border border-gray-100 rounded-xl p-2">
+              {recipients.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">Loading…</p>
+              ) : (
+                recipients.map((r, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setRecipient(r)}
+                    className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                      recipient?.name === r.name
+                        ? 'bg-orange-50 border border-orange-200'
+                        : 'hover:bg-gray-50 border border-transparent'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-[11px] font-black shrink-0">
+                      {initials(r.name)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{r.name}</p>
+                      <p className="text-[11px] text-gray-400">{r.role}</p>
+                    </div>
+                    {recipient?.name === r.name && (
+                      <span className="ml-auto text-orange-500 text-base">✓</span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1.5">Category</label>
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-100 bg-white"
+            >
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {/* Subject */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1.5">
+              Topic / Subject <span className="text-red-400">*</span>
+            </label>
+            <input
+              required
+              type="text"
+              value={subject}
+              onChange={e => setSubject(e.target.value)}
+              placeholder="e.g. Question about last week's Mathematics homework"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-100"
+            />
+          </div>
+
+          {/* First message */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1.5">
+              Your Message <span className="text-red-400">*</span>
+            </label>
+            <textarea
+              required
+              rows={4}
+              value={firstMsg}
+              onChange={e => setFirstMsg(e.target.value)}
+              placeholder="Write your message here…"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-100 resize-none"
+            />
+          </div>
+
+          {error && (
+            <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting || !recipient}
+            className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-orange-200 text-white font-bold py-3 rounded-xl text-sm transition-colors"
+          >
+            {submitting ? 'Sending…' : 'Send Message'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────
+
+export default function CommunicationCenterPage() {
+  const { studentId, setStudentId, language, setLanguage } = useDashboard();
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [isLoading,     setIsLoading]     = useState(true);
+  const [selected,      setSelected]      = useState<Conversation | null>(null);
+  const [messages,      setMessages]      = useState<Message[]>([]);
+  const [msgLoading,    setMsgLoading]    = useState(false);
+  const [reply,         setReply]         = useState('');
+  const [sending,       setSending]       = useState(false);
+
+  const [filter,        setFilter]        = useState('All');
+  const [search,        setSearch]        = useState('');
+  const [showModal,     setShowModal]     = useState(false);
+  const [recipients,    setRecipients]    = useState<Recipient[]>([]);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load conversations
+  const loadConversations = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchConversations(studentId, 1);
+      setConversations(data);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [studentId]);
+
+  useEffect(() => {
+    setSelected(null);
+    setMessages([]);
+    loadConversations();
+  }, [loadConversations]);
+
+  // Load recipients for modal
+  useEffect(() => {
+    if (showModal && recipients.length === 0) {
+      fetchConversationRecipients(studentId).then(setRecipients);
+    }
+  }, [showModal, studentId, recipients.length]);
+
+  // Load messages when conversation selected
+  useEffect(() => {
+    if (!selected) return;
+    const load = async () => {
+      setMsgLoading(true);
+      try {
+        const data = await fetchConversationMessages(selected.conv_id);
+        setMessages(data);
+      } finally {
+        setMsgLoading(false);
+      }
+    };
+    load();
+  }, [selected]);
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reply.trim() || !selected || sending) return;
+    setSending(true);
+    try {
+      const msg = await sendConversationMessage(selected.conv_id, 'PARENT', 'Parent', reply.trim());
+      setMessages(prev => [...prev, msg]);
+      setReply('');
+      // Optimistically update list
+      setConversations(prev =>
+        prev.map(c =>
+          c.conv_id === selected.conv_id
+            ? { ...c, latest_message: reply.trim(), latest_sender: 'PARENT', latest_message_time: new Date().toISOString() }
+            : c
+        )
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleConversationCreated = (conv: Conversation) => {
+    setConversations(prev => [conv, ...prev]);
+    setSelected(conv);
+    setShowModal(false);
+    setRecipients([]);
+  };
+
+  // Filtered list
+  const filtered = conversations.filter(c => {
+    if (filter === 'Unread' && c.unread_count === 0) return false;
+    if (filter !== 'All' && filter !== 'Unread' && c.category !== filter) return false;
+    if (search && !c.subject.toLowerCase().includes(search.toLowerCase()) &&
+        !c.recipient_name.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  return (
+    <div className="min-h-full flex flex-col bg-[#F9FAFB] text-gray-800 font-sans">
+      <TopBar
+        studentId={studentId} setStudentId={setStudentId}
+        language={language}   setLanguage={setLanguage}
+        isLoading={isLoading}
       />
 
-      <div className="flex-1 p-4 md:p-6 flex flex-col md:flex-row gap-6 max-w-7xl mx-auto w-full h-[calc(100vh-80px)] overflow-hidden">
-        
-        {/* LEFT PANE: Ticket List */}
-        <div className="w-full md:w-1/3 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
-          <div className="p-4 border-b border-gray-100">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <ChatBubbleLeftRightIcon className="w-6 h-6 text-orange-500" />
-                Support Hub
-              </h2>
-              <button 
-                onClick={() => setShowNewModal(true)}
-                className="bg-orange-600 hover:bg-orange-700 text-white p-2 rounded-xl transition-colors shadow-sm"
-                title="Raise Concern"
+      {/* Two-panel layout */}
+      <div className="flex-1 flex overflow-hidden" style={{ height: 'calc(100vh - 72px)' }}>
+
+        {/* ── LEFT PANEL: Conversation List ── */}
+        <div className="w-80 shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden">
+
+          {/* Header */}
+          <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ChatBubbleLeftRightIcon className="w-5 h-5 text-orange-500" />
+                <h2 className="font-bold text-gray-900 text-sm">Communication Center</h2>
+              </div>
+              <button
+                onClick={() => setShowModal(true)}
+                className="w-7 h-7 rounded-lg bg-orange-500 hover:bg-orange-600 text-white flex items-center justify-center transition-colors"
+                title="Start Conversation"
               >
-                <PlusIcon className="w-5 h-5" />
+                <PlusIcon className="w-4 h-4" />
               </button>
             </div>
-            
-            <div className="relative mb-3">
-              <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-2.5 text-gray-400" />
-              <input 
-                type="text" 
-                placeholder="Search tickets..." 
-                className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+
+            {/* Search */}
+            <div className="relative mb-2.5">
+              <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search conversations…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs outline-none focus:border-orange-300 transition-all"
               />
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {['All', 'Open', 'Resolved', 'High Priority'].map(f => (
-                <button 
+            {/* Filter tabs */}
+            <div className="flex gap-1 overflow-x-auto pb-0.5">
+              {FILTER_TABS.map(f => (
+                <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors ${filter === f ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg whitespace-nowrap transition-colors ${
+                    filter === f ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-100'
+                  }`}
                 >
                   {f}
                 </button>
@@ -163,139 +512,132 @@ export default function CommunicationCenterPage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {/* Conversation list */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
             {isLoading ? (
-              <div className="flex justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>
-            ) : filteredTickets.length === 0 ? (
-              <div className="text-center p-8 text-gray-400 text-sm">No tickets found</div>
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-400" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+                <ChatBubbleLeftRightIcon className="w-10 h-10 text-gray-200 mb-3" />
+                <p className="text-sm font-semibold text-gray-400">No conversations yet</p>
+                <p className="text-xs text-gray-300 mt-1">Start one using the + button above</p>
+              </div>
             ) : (
-              filteredTickets.map(t => (
-                <div 
-                  key={t.ticket_id} 
-                  onClick={() => setSelectedTicket(t)}
-                  className={`p-3 rounded-xl cursor-pointer border transition-all ${selectedTicket?.ticket_id === t.ticket_id ? 'bg-orange-50 border-orange-200' : 'bg-white border-transparent hover:bg-gray-50'}`}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t.ticket_number}</span>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${getStatusColor(t.status)}`}>{t.status.replace('_', ' ')}</span>
-                  </div>
-                  <h3 className="font-bold text-sm text-gray-800 line-clamp-1">{t.subject}</h3>
-                  <p className="text-xs text-gray-500 mt-1 line-clamp-1">{t.latest_message ? t.latest_message.message : 'No messages'}</p>
-                </div>
+              filtered.map(c => (
+                <ConvItem
+                  key={c.conv_id}
+                  conv={c}
+                  selected={selected?.conv_id === c.conv_id}
+                  onClick={() => setSelected(c)}
+                />
               ))
             )}
           </div>
         </div>
 
-        {/* RIGHT PANE: Selected Thread */}
-        <div className="w-full md:w-2/3 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
-          {selectedTicket ? (
+        {/* ── RIGHT PANEL: Thread ── */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-white">
+          {!selected ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+              <ChatBubbleLeftRightIcon className="w-14 h-14 text-gray-200 mb-4" />
+              <h3 className="text-base font-bold text-gray-500">Select a conversation</h3>
+              <p className="text-sm text-gray-400 mt-1 max-w-xs">
+                Choose a conversation from the left panel to view messages and reply.
+              </p>
+              <button
+                onClick={() => setShowModal(true)}
+                className="mt-5 inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Start a Conversation
+              </button>
+            </div>
+          ) : (
             <>
-              <div className="p-4 md:p-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-start">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-bold text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-md">{selectedTicket.ticket_number}</span>
-                    <span className="text-xs font-semibold text-gray-500">{selectedTicket.category}</span>
-                    {selectedTicket.priority === 'HIGH' && <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-md">Urgent</span>}
+              {/* Thread header */}
+              <div className="px-5 py-4 border-b border-gray-100 bg-white shrink-0">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-sm font-black shrink-0">
+                    {initials(selected.recipient_name)}
                   </div>
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-800">{selectedTicket.subject}</h2>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-gray-900 text-sm">{selected.recipient_name}</h3>
+                      {categoryBadge(selected.category)}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selected.status === 'OPEN' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {selected.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">{selected.subject}</p>
+                  </div>
                 </div>
-                <span className={`text-xs font-bold px-3 py-1 rounded-lg ${getStatusColor(selectedTicket.status)}`}>{selectedTicket.status.replace('_', ' ')}</span>
               </div>
-              
-              <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-                {isMessagesLoading ? (
-                  <div className="flex justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div></div>
+
+              {/* Messages area */}
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                {msgLoading ? (
+                  <div className="flex justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-400" />
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <p className="text-sm text-gray-400">No messages yet.</p>
+                    <p className="text-xs text-gray-300 mt-1">Send the first message below.</p>
+                  </div>
                 ) : (
-                  messages.map((m, idx) => {
-                    const isParent = m.sender_type === 'PARENT';
-                    return (
-                      <div key={idx} className={`flex flex-col ${isParent ? 'items-end' : 'items-start'}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          {!isParent && <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase">{m.sender_type}</span>}
-                          <span className="text-xs font-medium text-gray-500">{m.sender_name} • {new Date(m.created_at).toLocaleDateString()} {new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                        </div>
-                        <div className={`p-4 rounded-2xl max-w-[85%] text-sm ${isParent ? 'bg-gray-800 text-white rounded-tr-sm' : 'bg-orange-50 text-gray-800 border border-orange-100 rounded-tl-sm'}`}>
-                          <p className="whitespace-pre-wrap">{m.message}</p>
-                        </div>
-                      </div>
-                    )
-                  })
+                  <>
+                    {/* Date divider at top */}
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="flex-1 h-px bg-gray-100" />
+                      <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">
+                        {new Date(messages[0].created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                      <div className="flex-1 h-px bg-gray-100" />
+                    </div>
+                    {messages.map(m => <MessageBubble key={m.message_id} msg={m} />)}
+                    <div ref={messagesEndRef} />
+                  </>
                 )}
               </div>
 
-              <div className="p-4 bg-white border-t border-gray-100">
-                <form onSubmit={handleReply} className="flex gap-3">
-                  <input 
-                    type="text" 
-                    value={replyMessage}
-                    onChange={(e) => setReplyMessage(e.target.value)}
-                    placeholder="Type your reply..." 
-                    className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
+              {/* Reply input */}
+              <div className="px-4 py-3 border-t border-gray-100 bg-white shrink-0">
+                <form onSubmit={handleSend} className="flex gap-2 items-end">
+                  <textarea
+                    rows={2}
+                    value={reply}
+                    onChange={e => setReply(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e as any); }
+                    }}
+                    placeholder="Write a message to the teacher…"
+                    className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-100 resize-none transition-all"
                   />
-                  <button 
+                  <button
                     type="submit"
-                    disabled={!replyMessage.trim()}
-                    className="bg-orange-600 hover:bg-orange-700 disabled:bg-orange-300 disabled:cursor-not-allowed text-white px-5 rounded-xl font-bold transition-all shadow-sm flex items-center justify-center"
+                    disabled={!reply.trim() || sending}
+                    className="w-10 h-10 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:bg-orange-200 text-white flex items-center justify-center transition-colors shrink-0"
                   >
-                    <PaperAirplaneIcon className="w-5 h-5" />
+                    <PaperAirplaneIcon className="w-4 h-4" />
                   </button>
                 </form>
+                <p className="text-[10px] text-gray-300 mt-1.5 ml-1">Press Enter to send · Shift+Enter for new line</p>
               </div>
             </>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-500">
-              <ChatBubbleLeftRightIcon className="w-16 h-16 text-gray-200 mb-4" />
-              <h3 className="text-xl font-bold text-gray-700">No Ticket Selected</h3>
-              <p className="text-sm mt-2 max-w-md">Select a conversation from the left to view details and reply, or raise a new concern.</p>
-            </div>
           )}
         </div>
       </div>
 
-      {/* New Ticket Modal */}
-      {showNewModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
-            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50">
-              <h3 className="font-bold text-xl text-gray-800">Raise Concern</h3>
-              <button onClick={() => setShowNewModal(false)} className="text-gray-400 hover:text-gray-600">
-                <XMarkIcon className="w-6 h-6" />
-              </button>
-            </div>
-            <form onSubmit={handleCreateTicket} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Subject</label>
-                <input required type="text" value={newSubject} onChange={e=>setNewSubject(e.target.value)} className="w-full border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none" placeholder="Brief subject" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Category</label>
-                  <select value={newCategory} onChange={e=>setNewCategory(e.target.value)} className="w-full border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none">
-                    {['Academic', 'Attendance', 'Homework', 'PTM Request', 'Leave Request', 'Behavioral Concern', 'Transport', 'Fee Issue', 'General Query'].map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Priority</label>
-                  <select value={newPriority} onChange={e=>setNewPriority(e.target.value)} className="w-full border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none">
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Message</label>
-                <textarea required rows={4} value={newMessage} onChange={e=>setNewMessage(e.target.value)} className="w-full border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none resize-none" placeholder="Describe your concern in detail..."></textarea>
-              </div>
-              <div className="pt-2">
-                <button type="submit" className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 rounded-xl font-bold transition-colors">
-                  Submit Ticket
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* New conversation modal */}
+      {showModal && (
+        <NewConversationModal
+          studentId={studentId}
+          recipients={recipients}
+          onClose={() => { setShowModal(false); setRecipients([]); }}
+          onCreate={handleConversationCreated}
+        />
       )}
     </div>
   );

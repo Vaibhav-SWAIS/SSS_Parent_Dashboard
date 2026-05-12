@@ -1,3 +1,10 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — AttendanceTrendWidget
+// Was: showed attendance trend data on the old dashboard. Replaced by
+// AttendanceHeatWidget (which links to /parent/attendance) and the full
+// Attendance module (/parent/attendance/page.tsx).
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 'use client';
 
 export default function AttendanceTrendWidget({ data }: { data: any }) {

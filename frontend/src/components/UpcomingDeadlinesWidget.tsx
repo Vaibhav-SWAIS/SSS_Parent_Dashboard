@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — UpcomingDeadlinesWidget
+// Was: a standalone deadlines card on the old dashboard. Dashboard redesign
+// renders deadlines inline within a SectionCard — no external component needed.
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 import React from 'react';
 import { CalendarIcon, ClockIcon } from '@heroicons/react/24/outline';
 

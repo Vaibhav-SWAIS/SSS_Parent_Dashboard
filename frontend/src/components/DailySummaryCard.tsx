@@ -1,3 +1,10 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — DailySummaryCard
+// Was: showed daily summary counts (assignments pending, notices today,
+// upcoming quizzes) as a standalone card on the old dashboard. Dashboard
+// redesign moved those figures into the StatCard row inline.
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 'use client';
 
 export default function DailySummaryCard({ summary }: { summary: any }) {

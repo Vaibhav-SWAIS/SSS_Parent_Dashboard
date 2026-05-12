@@ -223,6 +223,7 @@ class SupportTicket(Base):
     category = Column(String)
     priority = Column(String)
     status = Column(String, default="OPEN")
+    recipient_name = Column(String, nullable=True)  # Teacher name or department
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -241,3 +242,20 @@ class TicketMessage(Base):
     is_read = Column(Boolean, default=False)
 
     ticket_info = relationship("SupportTicket")
+
+class LeaveRequest(Base):
+    __tablename__ = "leave_requests"
+
+    leave_request_id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("student_master.student_id"), index=True)
+    parent_id = Column(Integer, ForeignKey("parent_master.parent_id"), index=True)
+    from_date = Column(Date)
+    to_date = Column(Date)
+    reason = Column(String)
+    parent_note = Column(Text, nullable=True)
+    status = Column(String, default="Pending")  # Pending, Approved, Rejected
+    reviewed_by = Column(Integer, ForeignKey("teacher_master.teacher_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    student_info = relationship("StudentMaster")
+    parent_info = relationship("ParentMaster")

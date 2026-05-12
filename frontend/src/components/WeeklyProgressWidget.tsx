@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — WeeklyProgressWidget
+// Was: showed a "Weekly Progress %" trend card on old dashboard.
+// Removed during: dashboard redesign (fake vanity metric cleanup).
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 import React from 'react';
 import { ChartBarIcon, ArrowTrendingUpIcon, ArrowTrendingDownIcon } from '@heroicons/react/24/solid';
 

@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — AcademicStreakWidget
+// Was: showed "Academic Streak" (consecutive active weeks) on old dashboard.
+// Removed during: dashboard redesign (fake-streak metric removed).
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 import React from 'react';
 import { FireIcon } from '@heroicons/react/24/solid';
 

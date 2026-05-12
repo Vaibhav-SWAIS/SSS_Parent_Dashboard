@@ -2,10 +2,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from fastapi import HTTPException
 from models import (
-    StudentMaster, ClassMaster, AssignmentMaster, StudentSubmission, 
-    QuizMaster, QuizResponse, TeacherParentInteractionV2, NoticeBoard, 
+    StudentMaster, ClassMaster, AssignmentMaster, StudentSubmission,
+    QuizMaster, QuizResponse, TeacherParentInteractionV2, NoticeBoard,
     SubjectMaster, ChapterMaster, TeacherMaster, CallRequest,
-    AttendanceMaster, SchoolEvent
+    AttendanceMaster,
+    # SchoolEvent — imported but unused; upcoming_events=[] is hardcoded.
+    # Restore if school events are queried from DB.
 )
 from schemas import (
     DashboardResponse, StudentSchema, AssignmentSchema, QuizSchema, 

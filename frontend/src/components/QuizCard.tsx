@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — QuizCard
+// Was: a compact quiz summary card on the old dashboard. Dashboard redesign
+// shows a single "Quiz Avg" StatCard linking to /parent/quiz.
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 export default function QuizCard({ quizzes }: { quizzes: any[] }) {
   let validQuizzes = (quizzes || []).filter(q => q.score !== '--' && q.total !== '--');
   let avgScore = 0;

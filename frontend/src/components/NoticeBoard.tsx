@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — NoticeBoard (component)
+// Was: a compact notice-board card on the old dashboard with translation.
+// Notices are now handled by /parent/notices page (its own page.tsx) and
+// referenced via the StatCard. Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { translateText } from '../lib/api';
 

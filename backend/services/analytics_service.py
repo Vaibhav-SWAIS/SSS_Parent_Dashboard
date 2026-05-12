@@ -1,3 +1,19 @@
+# ════════════════════════════════════════════════════════════════════════════
+# DISABLED SERVICE — analytics_service.py
+#
+# This service powered GET /analytics/{student_id}. The corresponding
+# /parent/analytics frontend page was removed during the dashboard redesign.
+# The route in routers/dashboard.py is also commented out.
+#
+# The file is kept on disk as a reference implementation — it contains useful
+# subject-performance, monthly-trend, and assignment-completion logic that
+# could be reused if an analytics module is added back.
+#
+# To restore: uncomment the route in dashboard.py and re-add the import:
+#   from services.analytics_service import get_analytics_data
+# Also re-enable AnalyticsResponse in schemas.py.
+# ════════════════════════════════════════════════════════════════════════════
+
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from fastapi import HTTPException

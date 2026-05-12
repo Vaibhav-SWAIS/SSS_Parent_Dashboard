@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — UpcomingEventsWidget
+// Was: displayed school events (Exams, PTM, Holidays) from the SchoolEvent
+// table. Dashboard now returns upcoming_events=[] (no events queried).
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 'use client';
 
 export default function UpcomingEventsWidget({ events }: { events: any[] }) {

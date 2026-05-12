@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — SubjectPerformanceChart
+// Was: a Recharts bar chart for per-subject scores on the Analytics page.
+// The Analytics page was removed. Dashboard now renders inline progress bars
+// (no external component needed). Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 'use client';
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';

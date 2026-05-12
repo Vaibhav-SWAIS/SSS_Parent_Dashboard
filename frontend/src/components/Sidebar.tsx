@@ -7,11 +7,11 @@ export default function Sidebar() {
   
   const menuItems = [
     { name: 'Dashboard', icon: '🏠', path: '/parent/dashboard' },
+    { name: 'Attendance', icon: '📅', path: '/parent/attendance' },
     { name: 'Assignments', icon: '📄', path: '/parent/assignments' },
     { name: 'Quiz Performance', icon: '📊', path: '/parent/quiz' },
     { name: 'Teacher Remarks', icon: '💬', path: '/parent/remarks' },
     { name: 'Notices', icon: '🔔', path: '/parent/notices' },
-    { name: 'Analytics', icon: '📈', path: '/parent/analytics' },
     { name: 'Communication Center', icon: '🏫', path: '/parent/communication' },
   ];
 

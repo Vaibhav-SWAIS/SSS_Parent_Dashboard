@@ -1,3 +1,11 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — AssignmentCompletionChart
+// Was: a pie/donut chart showing assignment completion breakdown (completed /
+// pending / overdue) on the old dashboard, driven by fetchAssignmentAnalytics.
+// Removed during: dashboard redesign (AssignmentCompletionChart removed).
+// Not imported by: any page or component.
+// Restore: import in dashboard/page.tsx and supply assignment analytics data.
+// ════════════════════════════════════════════════════════════════════════════
 'use client';
 
 // Pie/donut chart removed per UI refinement spec.

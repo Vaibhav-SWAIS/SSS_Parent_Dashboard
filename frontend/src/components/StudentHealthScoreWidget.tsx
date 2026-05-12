@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — StudentHealthScoreWidget
+// Was: displayed a composite "Health Score" (0-100) on old dashboard.
+// Removed during: dashboard redesign (composite score considered misleading).
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 import React from 'react';
 import { HeartIcon } from '@heroicons/react/24/solid';
 

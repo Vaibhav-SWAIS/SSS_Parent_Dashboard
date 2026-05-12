@@ -1,3 +1,10 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — AssignmentCard
+// Was: a compact assignment list card on the old dashboard sidebar.
+// Dashboard redesign removed all mini-list cards; assignments are now
+// accessed via the StatCard link to /parent/assignments.
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 export default function AssignmentCard({ assignments }: { assignments: any[] }) {
   return (
     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col h-[320px]">

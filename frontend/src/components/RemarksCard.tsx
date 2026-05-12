@@ -1,3 +1,9 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — RemarksCard
+// Was: a compact teacher-remarks card on the old dashboard with translation.
+// Dashboard redesign removed mini-cards; remarks are accessed via
+// /parent/remarks page. Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { translateText } from '../lib/api';
 

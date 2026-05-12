@@ -1,3 +1,10 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ORPHANED COMPONENT — EngagementWidget
+// Was: displayed an "Engagement Score" metric (High/Average/Low) on the old
+// dashboard, driven by EngagementIndicatorSchema. Removed during dashboard
+// redesign as fake-metric/vanity data.
+// Not imported by: any page or component.
+// ════════════════════════════════════════════════════════════════════════════
 'use client';
 export default function EngagementWidget({ data }: { data: any }) {
   if (!data) return null;
