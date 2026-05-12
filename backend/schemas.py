@@ -120,6 +120,7 @@ class PerformanceSummarySchema(BaseModel):
     improvement_percent: str
     strongest_subject: str
     weakest_subject: str
+    avg_score: Optional[float] = None
 
 class AttendanceTrendSchema(BaseModel):
     percentage: str
@@ -129,6 +130,9 @@ class AttendanceTrendSchema(BaseModel):
 class AlertSchema(BaseModel):
     type: str # warning, info, success, error
     message: str
+    subject: Optional[str] = None
+    due: Optional[str] = None
+    priority: Optional[str] = None
 
 class AcademicHealthSchema(BaseModel):
     status: str
@@ -225,6 +229,8 @@ class DashboardResponse(BaseModel):
     attendance_heat: Optional[str] = None
     weekly_progress: Optional[WeeklyProgressSchema] = None
     class_rank: Optional[ClassRankSchema] = None
+    notifications: List[NotificationSchema] = []
+    subject_performance: List['SubjectPerformanceData'] = []
 
 class SubjectPerformanceData(BaseModel):
     subject: str

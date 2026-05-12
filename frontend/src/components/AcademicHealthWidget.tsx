@@ -1,21 +1,37 @@
 'use client';
+import Link from 'next/link';
+
 export default function AcademicHealthWidget({ data }: { data: any }) {
-  if (!data) return null;
-  const colors = {
-    "Excellent": "bg-green-100 text-green-800 border-green-200",
-    "Stable": "bg-blue-100 text-blue-800 border-blue-200",
-    "Needs Attention": "bg-orange-100 text-orange-800 border-orange-200",
-    "Critical": "bg-red-100 text-red-800 border-red-200"
+  if (!data) return (
+    <Link href="/parent/analytics" className="flex flex-col justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 h-full">
+      <p className="text-xs text-gray-500 font-semibold">Academic Health</p>
+      <p className="text-2xl font-black text-gray-300">—</p>
+    </Link>
+  );
+
+  // description is "Score: 76/100"
+  const score = data.description?.match(/\d+/)?.[ 0] ?? '—';
+
+  const pillCfg: Record<string, string> = {
+    'Good':           'text-green-700 bg-green-100',
+    'Average':        'text-yellow-700 bg-yellow-100',
+    'Needs Attention':'text-red-700 bg-red-100',
+    'Excellent':      'text-emerald-700 bg-emerald-100',
   };
-  const colorClass = colors[data.status as keyof typeof colors] || "bg-gray-100 border-gray-200";
+  const pillClass = pillCfg[data.status] ?? 'text-gray-600 bg-gray-100';
+
   return (
-    <div className={`p-6 rounded-2xl border shadow-sm ${colorClass}`}>
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-2xl">❤️‍🩹</span>
-        <h3 className="font-bold opacity-90">Academic Health</h3>
+    <Link href="/parent/analytics" className="flex flex-col justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-orange-200 hover:bg-orange-50 transition-all cursor-pointer h-full">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs text-gray-500 font-semibold">Academic Health</p>
+        <span className="text-base">❤️</span>
       </div>
-      <p className="text-2xl font-black mb-1">{data.status}</p>
-      <p className="text-sm opacity-80">{data.description}</p>
-    </div>
+      <p className="text-2xl font-black text-gray-900 leading-none">
+        {score}<span className="text-sm font-medium text-gray-400">/100</span>
+      </p>
+      <span className={`mt-2 self-start text-[10px] font-bold px-2 py-0.5 rounded-full ${pillClass}`}>
+        {data.status}
+      </span>
+    </Link>
   );
 }

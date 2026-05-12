@@ -1,44 +1,45 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
+// Pie/donut chart removed per UI refinement spec.
+// Now renders a compact 3-stat summary row instead.
 export default function AssignmentCompletionChart({ data }: { data: any }) {
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  if (!isMounted) return <div className="h-64 w-full mt-4 bg-gray-50 animate-pulse rounded-xl"></div>;
   if (!data) return null;
 
-  const chartData = [
-    { name: 'Completed', value: data.completed, color: '#10B981' },
-    { name: 'Pending', value: data.pending, color: '#F59E0B' },
-    { name: 'Overdue', value: data.overdue, color: '#EF4444' }
-  ].filter(item => item.value > 0);
+  const total    = (data.total    ?? 0) as number;
+  const completed = (data.submitted ?? data.completed ?? 0) as number;
+  const pending  = (data.pending  ?? 0) as number;
+  const overdue  = (data.overdue  ?? 0) as number;
+  const pct      = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-  if (chartData.length === 0) return <p className="text-gray-500 text-sm mt-4 text-center">No assignment data available.</p>;
+  const stats = [
+    { label: 'Completed', value: completed, color: 'bg-emerald-500', text: 'text-emerald-700' },
+    { label: 'Pending',   value: pending,   color: 'bg-amber-400',   text: 'text-amber-700'   },
+    { label: 'Overdue',   value: overdue,   color: 'bg-red-500',     text: 'text-red-700'     },
+  ];
 
   return (
-    <div className="h-64 w-full mt-4">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={chartData}
-            innerRadius={60}
-            outerRadius={80}
-            paddingAngle={5}
-            dataKey="value"
-          >
-            {chartData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} />
-            ))}
-          </Pie>
-          <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
-          <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-        </PieChart>
-      </ResponsiveContainer>
+    <div className="space-y-2">
+      {/* Stacked progress bar */}
+      <div className="flex h-2 rounded-full overflow-hidden gap-0.5">
+        {total > 0 ? (
+          <>
+            <div className="bg-emerald-500 rounded-full transition-all duration-700" style={{ width: `${(completed/total)*100}%` }} />
+            <div className="bg-amber-400 rounded-full transition-all duration-700"   style={{ width: `${(pending/total)*100}%`   }} />
+            <div className="bg-red-500 rounded-full transition-all duration-700"     style={{ width: `${(overdue/total)*100}%`   }} />
+          </>
+        ) : <div className="bg-gray-200 w-full rounded-full" />}
+      </div>
+      {/* Legend */}
+      <div className="flex items-center gap-4">
+        {stats.map(s => (
+          <div key={s.label} className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${s.color} shrink-0`} />
+            <span className="text-[10px] text-gray-500">{s.label}</span>
+            <span className={`text-[10px] font-black ${s.text}`}>{s.value}</span>
+          </div>
+        ))}
+        <span className="ml-auto text-xs font-black text-gray-700">{pct}%</span>
+      </div>
     </div>
   );
 }

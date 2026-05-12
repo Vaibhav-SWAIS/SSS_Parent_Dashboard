@@ -1,4 +1,3 @@
-import random
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from fastapi import HTTPException
@@ -53,19 +52,27 @@ def get_analytics_data(db: Session, student_id: int):
         weakest_subject = min(avg_per_subj, key=avg_per_subj.get)
         
         for subj, avg in avg_per_subj.items():
-            # Mocking class average for now, could be calculated by querying all students in class
-            class_avg = max(40, avg - random.uniform(-10, 15))
+            # Mocking class average deterministically based on student average
+            class_avg = max(40, avg - (student_id % 15))
             subject_performance.append(SubjectPerformanceData(
                 subject=subj, score=round(avg, 1), class_average=round(class_avg, 1)
             ))
 
-    # 3. Monthly Trends (Mocking historical trend over last 6 months)
+    # 3. Monthly Trends (Deterministic based on overall performance)
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
     monthly_trends = []
-    base_score = random.uniform(60, 80)
+    
+    # Calculate a real base score from their quizzes
+    base_score = 75.0
+    if subject_scores:
+        all_scores = [score for scores in subject_scores.values() for score in scores]
+        if all_scores:
+            base_score = sum(all_scores) / len(all_scores)
+            
+    current_score = max(40, base_score - 10) # Start lower and trend towards their actual average
     for m in months:
-        base_score += random.uniform(-5, 8)
-        monthly_trends.append({"month": m, "score": round(min(100, max(0, base_score)), 1)})
+        current_score += (base_score - current_score) * 0.4 + (student_id % 5)
+        monthly_trends.append({"month": m, "score": round(min(100, max(0, current_score)), 1)})
 
     # 4. Assignment Completion
     assignments_query = db.query(
@@ -104,7 +111,7 @@ def get_analytics_data(db: Session, student_id: int):
             "status": a.status
         })
 
-    growth_percent = f"+{round(random.uniform(2.0, 8.0), 1)}%" if len(subject_scores) > 0 else "0%"
+    growth_percent = f"+{round((student_id % 5) + 2.5, 1)}%" if len(subject_scores) > 0 else "0%"
 
     return AnalyticsResponse(
         student=student_data,

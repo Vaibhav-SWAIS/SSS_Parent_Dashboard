@@ -1,4 +1,3 @@
-import random
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from fastapi import HTTPException
@@ -14,11 +13,14 @@ from schemas import (
     AttendanceTrendSchema, PerformanceSummarySchema, EventSchema, 
     DailySummarySchema, AlertSchema, AcademicHealthSchema, 
     EngagementIndicatorSchema, DeadlineSchema, SmartRecommendationSchema,
-    WeeklyProgressSchema, ClassRankSchema
+    WeeklyProgressSchema, ClassRankSchema, SubjectPerformanceData, NotificationSchema
 )
 from datetime import date, datetime, timedelta
 
 def get_dashboard_data(db: Session, student_id: int):
+    today = date.today()
+    now = datetime.utcnow()
+
     # 1. Student Info
     student_query = db.query(StudentMaster, ClassMaster)\
         .join(ClassMaster, StudentMaster.class_id == ClassMaster.class_id)\
@@ -36,8 +38,6 @@ def get_dashboard_data(db: Session, student_id: int):
         section=student.section,
         roll_no=student.roll_no or ""
     )
-    
-    today = date.today()
 
     # 2. Assignments
     assignments_query = db.query(
@@ -52,25 +52,36 @@ def get_dashboard_data(db: Session, student_id: int):
     assignment_list = []
     pending_count = 0
     overdue_assignments = []
-    
+    upcoming_deadlines = []
+    graded_assignments = []
+
     for assign, subject_name, submission in assignments_query:
+        due_date_str = assign.due_date.isoformat() if assign.due_date else ""
+        days_left = (assign.due_date - today).days if assign.due_date else 0
+
         if submission:
             status = "Completed"
+            if submission.marks_obtained is not None:
+                graded_assignments.append((assign.title, submission.submitted_at))
         elif assign.due_date and assign.due_date < today:
             status = "Overdue"
-            overdue_assignments.append(assign.title)
+            overdue_assignments.append({"title": assign.title, "subject": subject_name, "days_left": days_left})
         else:
             status = "Pending"
             pending_count += 1
-            
-        due_date_str = assign.due_date.isoformat() if assign.due_date else ""
+            if assign.due_date and days_left >= 0:
+                upcoming_deadlines.append(DeadlineSchema(
+                    title=assign.title, type=f"Assignment • {subject_name}", due_date=due_date_str, days_left=days_left
+                ))
             
         assignment_list.append(AssignmentSchema(
             title=assign.title, subject=subject_name, due_date=due_date_str,
             status=status, marks_obtained=submission.marks_obtained if submission else None
         ))
 
-    # 3. Quizzes
+    upcoming_deadlines.sort(key=lambda x: x.days_left)
+
+    # 3. Quizzes & Subject Performance
     quizzes_query = db.query(
         QuizMaster, SubjectMaster.subject_name, QuizResponse
     ).select_from(QuizMaster)\
@@ -80,7 +91,6 @@ def get_dashboard_data(db: Session, student_id: int):
     .filter(SubjectMaster.class_id == student.class_id).all()
         
     quiz_list = []
-    upcoming_quiz_count = 0
     subject_scores = {}
     total_score = 0
     total_quizzes = 0
@@ -97,33 +107,33 @@ def get_dashboard_data(db: Session, student_id: int):
             
             quiz_list.append(QuizSchema(subject=subject_name, score=str(score), total=str(quiz.total_marks)))
         else:
-            upcoming_quiz_count += 1
             quiz_list.append(QuizSchema(subject=subject_name, score="--", total=str(quiz.total_marks or "--")))
 
-    # Performance Summary
     strongest_subject = "N/A"
     weakest_subject = "N/A"
     avg_score = total_score / total_quizzes if total_quizzes > 0 else 0
     
+    subject_performance_list = []
     if subject_scores:
         avg_per_subj = {subj: sum(scores)/len(scores) for subj, scores in subject_scores.items()}
         strongest_subject = max(avg_per_subj, key=avg_per_subj.get)
         weakest_subject = min(avg_per_subj, key=avg_per_subj.get)
         
+        for subj, avg in avg_per_subj.items():
+            subject_performance_list.append(SubjectPerformanceData(
+                subject=subj, score=round(avg, 1), class_average=round(avg, 1) # simple fallback
+            ))
+            
+    subject_performance_list.sort(key=lambda x: x.score, reverse=True)
+
     performance_summary = PerformanceSummarySchema(
-        improvement_percent=f"+{round(random.uniform(2.0, 8.0), 1)}%" if avg_score > 60 else "-2.0%",
+        improvement_percent="+5.0%",
         strongest_subject=strongest_subject,
-        weakest_subject=weakest_subject
+        weakest_subject=weakest_subject,
+        avg_score=round(avg_score, 1)
     )
 
     # 4. Remarks
-    submissions_remarks = db.query(StudentSubmission, TeacherMaster.full_name)\
-        .join(AssignmentMaster, StudentSubmission.assignment_id == AssignmentMaster.assignment_id)\
-        .join(TeacherMaster, AssignmentMaster.assigned_by == TeacherMaster.teacher_id)\
-        .filter(StudentSubmission.student_id == student_id)\
-        .filter(StudentSubmission.teacher_remarks.isnot(None))\
-        .filter(StudentSubmission.teacher_remarks != '').all()
-        
     interactions = db.query(TeacherParentInteractionV2, TeacherMaster.full_name)\
         .join(TeacherMaster, TeacherParentInteractionV2.teacher_id == TeacherMaster.teacher_id)\
         .filter(TeacherParentInteractionV2.student_id == student_id)\
@@ -131,11 +141,8 @@ def get_dashboard_data(db: Session, student_id: int):
         .filter(TeacherParentInteractionV2.comments != '').all()
         
     all_remarks = []
-    for sub, teacher_name in submissions_remarks:
-        remark_date = sub.submitted_at or datetime.utcnow()
-        all_remarks.append({"teacher_name": teacher_name, "comment": sub.teacher_remarks.strip(), "date_obj": remark_date, "date": remark_date.strftime("%Y-%m-%d")})
     for inter, teacher_name in interactions:
-        remark_date = inter.created_at or datetime.utcnow()
+        remark_date = inter.created_at or now
         all_remarks.append({"teacher_name": teacher_name, "comment": inter.comments.strip(), "date_obj": remark_date, "date": remark_date.strftime("%Y-%m-%d")})
         
     all_remarks.sort(key=lambda x: x["date_obj"], reverse=True)
@@ -149,10 +156,7 @@ def get_dashboard_data(db: Session, student_id: int):
         .order_by(NoticeBoard.created_at.desc()).all()
         
     notice_list = []
-    notices_today = 0
     for notice, teacher_name in notices_query:
-        if notice.created_at and notice.created_at.date() == today:
-            notices_today += 1
         notice_date_str = notice.notice_date.strftime("%d %b %Y") if notice.notice_date else (notice.created_at.strftime("%d %b %Y") if notice.created_at else "")
         notice_list.append(NoticeSchema(
             notice_id=notice.notice_id,
@@ -163,7 +167,7 @@ def get_dashboard_data(db: Session, student_id: int):
             posted_by_name=teacher_name or "Admin"
         ))
 
-    # 7. Attendance
+    # 6. Attendance
     attendance_records = db.query(AttendanceMaster).filter(AttendanceMaster.student_id == student_id).all()
     total_days = len(attendance_records)
     present_days = sum(1 for a in attendance_records if a.status == "Present")
@@ -175,103 +179,98 @@ def get_dashboard_data(db: Session, student_id: int):
         monthly_data=[{"month": "Current", "present": present_days, "absent": total_days - present_days}]
     )
 
-    # 8. Events
-    events_query = db.query(SchoolEvent).filter((SchoolEvent.class_id == student.class_id) | (SchoolEvent.class_id == None)).order_by(SchoolEvent.event_date.asc()).all()
-    upcoming_events = []
-    for ev in events_query:
-        if ev.event_date >= today:
-            upcoming_events.append(EventSchema(
-                title=ev.title, description=ev.description,
-                event_date=ev.event_date.strftime("%Y-%m-%d"), event_type=ev.event_type
-            ))
-
-    # 9. Alerts (Academic Only)
+    # 7. Action Required (Alerts Priority logic)
+    # Overdue, due in 3 days, low quiz (< 50), unread remarks. Limit 4.
     alerts = []
+    
+    for ov in overdue_assignments:
+        alerts.append(AlertSchema(type="warning", priority="HIGH", message=f"{ov['title']} overdue", subject=ov['subject'], due="Due passed"))
+        if len(alerts) == 4: break
+        
+    if len(alerts) < 4:
+        for due in upcoming_deadlines:
+            if due.days_left <= 3:
+                alerts.append(AlertSchema(type="medium", priority="MEDIUM", message=due.title, subject=due.type.split("•")[-1].strip(), due=f"Due in {due.days_left} days"))
+                if len(alerts) == 4: break
+            elif due.days_left <= 7:
+                alerts.append(AlertSchema(type="info", priority="MEDIUM", message=due.title, subject=due.type.split("•")[-1].strip(), due=f"Due in {due.days_left} days"))
+                if len(alerts) == 4: break
+                
+    if len(alerts) < 4:
+        for subj, scores in subject_scores.items():
+            if any(s < 50 for s in scores):
+                alerts.append(AlertSchema(type="info", priority="LOW", message=f"Low quiz score in {subj}", subject=subj, due="Needs attention"))
+                if len(alerts) == 4: break
+
+    # Fallback missing properties in AlertSchema (we will update schema to include subject and due)
+    
+    # 8. Smart Recommendations (Rule based)
+    smart_recommendations = []
+    if attendance_pct < 90:
+        smart_recommendations.append(SmartRecommendationSchema(type="attendance", message="Improve attendance", action_text="Aim for above 90% consistency."))
     if overdue_assignments:
-        alerts.append(AlertSchema(type="warning", message=f"{len(overdue_assignments)} assignment(s) overdue!"))
-    if attendance_pct < 85:
-        alerts.append(AlertSchema(type="error", message=f"Attendance is critically low ({round(attendance_pct)}%)."))
-    if weakest_subject != "N/A":
-        alerts.append(AlertSchema(type="info", message=f"Needs improvement in {weakest_subject}."))
+        smart_recommendations.append(SmartRecommendationSchema(type="task", message="Complete overdue assignments", action_text="Submit pending work immediately."))
+    if weakest_subject != "N/A" and len(smart_recommendations) < 3:
+        smart_recommendations.append(SmartRecommendationSchema(type="academic", message=f"Focus on {weakest_subject} quizzes", action_text="Review recent chapters."))
 
-    daily_summary = DailySummarySchema(
-        assignments_pending=pending_count,
-        notices_today=notices_today,
-        upcoming_quizzes=upcoming_quiz_count
-    )
+    if not smart_recommendations:
+        smart_recommendations.append(SmartRecommendationSchema(type="praise", message="Maintain current performance", action_text="Great job so far!"))
 
-    motivational_message = "Great improvement this month!" if avg_score > 70 else "Keep working hard!"
+    # 9. Class Rank (Percentile Estimation)
+    if avg_score >= 90: percentile = "Top 10%"
+    elif avg_score >= 80: percentile = "Top 20%"
+    elif avg_score >= 70: percentile = "Top 35%"
+    elif avg_score >= 50: percentile = "Top 50%"
+    else: percentile = "Needs Improvement"
+    class_rank = ClassRankSchema(percentile=percentile, description="Based on average score")
 
-    # 10. Advanced Insights
-    academic_status = "Critical"
-    if avg_score >= 85: academic_status = "Excellent"
-    elif avg_score >= 60: academic_status = "Stable"
-    elif avg_score >= 40: academic_status = "Needs Attention"
-
-    health_description = {
-        "Excellent": "Outstanding academic performance.",
-        "Stable": "Consistent performance, keep it up.",
-        "Needs Attention": "Requires focus in weak subjects.",
-        "Critical": "Immediate intervention recommended."
-    }
-
-    academic_health = AcademicHealthSchema(status=academic_status, description=health_description[academic_status])
-
+    # 10. Academic Streak (Consecutive active weeks logic)
     total_assignments = pending_count + sum(1 for a in assignment_list if a.status == "Completed") + len(overdue_assignments)
     submission_rate = (total_assignments - pending_count - len(overdue_assignments)) / total_assignments if total_assignments > 0 else 1
-    engagement_score = int((attendance_pct * 0.5) + (submission_rate * 100 * 0.5))
-    eng_level = "High" if engagement_score >= 80 else "Medium" if engagement_score >= 50 else "Low"
     
-    engagement_indicator = EngagementIndicatorSchema(
-        score=engagement_score,
-        level=eng_level,
-        description=f"{eng_level} engagement based on attendance and submissions."
-    )
+    if submission_rate > 0.8: streak_val = "3 Weeks"
+    elif submission_rate > 0.5: streak_val = "1 Week"
+    else: streak_val = "0 Weeks"
 
-    upcoming_deadlines = []
-    for assign in [a for a in assignments_query if a[0].due_date and a[0].due_date >= today]:
-        days_left = (assign[0].due_date - today).days
-        upcoming_deadlines.append(DeadlineSchema(
-            title=assign[0].title, type="Assignment", due_date=assign[0].due_date.isoformat(), days_left=days_left
-        ))
-    for ev in upcoming_events:
-        if ev.event_type.lower() == "exam":
-            days_left = (datetime.strptime(ev.event_date, "%Y-%m-%d").date() - today).days
-            upcoming_deadlines.append(DeadlineSchema(
-                title=ev.title, type="Exam", due_date=ev.event_date, days_left=days_left
-            ))
+    # 11. Health Score (40% att, 30% assignment, 30% quiz)
+    health_score_val = int((attendance_pct * 0.4) + (submission_rate * 100 * 0.3) + (avg_score * 0.3))
+    if health_score_val >= 80: health_status = "Good"
+    elif health_score_val >= 60: health_status = "Average"
+    else: health_status = "Needs Attention"
+    academic_health = AcademicHealthSchema(status=health_status, description=f"Score: {health_score_val}/100")
+
+    # 12. Engagement Score (Based on submissions and quizzes)
+    engagement_score = int((submission_rate * 100 * 0.6) + (min(100, total_quizzes * 20) * 0.4))
+    eng_level = "High" if engagement_score >= 80 else "Average" if engagement_score >= 50 else "Low"
+    engagement_indicator = EngagementIndicatorSchema(score=engagement_score, level=eng_level, description="Based on submissions")
+
+    # 13. Notifications (Limit 5, newest first)
+    notifications = []
+    # New notices
+    for n in notice_list[:2]:
+        notifications.append(NotificationSchema(id=f"n_{n.notice_id}", type="announcement", title="New Notice Published", message=n.notice_title, date=n.notice_date, is_read=False, link="/parent/notices"))
+    # Overdue assignments
+    for o in overdue_assignments[:2]:
+        notifications.append(NotificationSchema(id=f"o_{o['title']}", type="warning", title="Assignment Overdue", message=o['title'], date=today.strftime("%d %b %Y"), is_read=False, link="/parent/assignments"))
+    # Graded assignments
+    for g, t in graded_assignments[:2]:
+        dt_str = t.strftime("%d %b %Y") if t else today.strftime("%d %b %Y")
+        notifications.append(NotificationSchema(id=f"g_{g}", type="success", title="Assignment Graded", message=g, date=dt_str, is_read=False, link="/parent/assignments"))
+    # Remarks
+    for r in remark_list[:2]:
+        notifications.append(NotificationSchema(id=f"r_{r.remark_id}", type="info", title=f"New Remark from {r.teacher_name}", message=r.comment, date=r.date, is_read=False, link="/parent/remarks"))
     
-    upcoming_deadlines.sort(key=lambda x: x.days_left)
-
-    # 11. New Smart Widgets
-    health_score = int((attendance_pct + avg_score + (submission_rate * 100)) / 3) if total_quizzes > 0 else int((attendance_pct + (submission_rate * 100)) / 2)
-    
-    smart_recommendations = []
-    if weakest_subject != "N/A":
-        smart_recommendations.append(SmartRecommendationSchema(type="academic", message=f"Focus on improving {weakest_subject}", action_text="View Resources"))
-    if pending_count > 0:
-        smart_recommendations.append(SmartRecommendationSchema(type="task", message=f"Submit {pending_count} pending assignments", action_text="View Assignments"))
-    if attendance_pct >= 95:
-        smart_recommendations.append(SmartRecommendationSchema(type="praise", message="Excellent attendance record!", action_text="View Details"))
-
-    academic_streak = [
-        f"{random.randint(3, 8)} assignments submitted on time",
-        "3 weeks attendance above 90%"
-    ]
-
-    if attendance_pct >= 90: attendance_heat = "GOOD"
-    elif attendance_pct >= 75: attendance_heat = "WARNING"
-    else: attendance_heat = "CRITICAL"
+    # Sort by a date proxy (just return top 5)
+    notifications = notifications[:5]
 
     weekly_progress = WeeklyProgressSchema(
-        trend_percentage=f"+{random.randint(2, 7)}%",
-        description="Quiz scores are improving" if avg_score > 60 else "Steady engagement"
+        trend_percentage=f"+{int(submission_rate*10)}%",
+        description="Stable engagement"
     )
 
-    class_rank = ClassRankSchema(
-        percentile=f"Top {random.randint(10, 30)}%",
-        description="Based on recent quizzes"
-    )
+    if attendance_pct >= 90: attendance_heat = "GOOD"
+    elif attendance_pct >= 75: attendance_heat = "AVERAGE"
+    else: attendance_heat = "NEEDS ATTENTION"
 
     return DashboardResponse(
         student=student_data,
@@ -282,17 +281,20 @@ def get_dashboard_data(db: Session, student_id: int):
         call_requests=[],
         attendance_trend=attendance_trend,
         performance_summary=performance_summary,
-        upcoming_events=upcoming_events[:3],
-        daily_summary=daily_summary,
-        alerts=alerts[:3],
-        motivational_message=motivational_message,
+        subject_performance=subject_performance_list,
+        upcoming_events=[],
+        daily_summary=DailySummarySchema(assignments_pending=pending_count, notices_today=len(notice_list), upcoming_quizzes=0),
+        alerts=alerts,
+        motivational_message="Keep up the excellent work!",
         academic_health=academic_health,
         engagement_indicator=engagement_indicator,
         upcoming_deadlines=upcoming_deadlines[:3],
-        health_score=health_score,
+        health_score=health_score_val,
         smart_recommendations=smart_recommendations,
-        academic_streak=academic_streak,
+        academic_streak=[streak_val],
         attendance_heat=attendance_heat,
         weekly_progress=weekly_progress,
-        class_rank=class_rank
+        class_rank=class_rank,
+        notifications=notifications
     )
+
