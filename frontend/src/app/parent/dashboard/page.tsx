@@ -84,7 +84,8 @@ function AlertPill({ type, priority }: { type: string; priority?: string }) {
 
 function recIcon(type: string) {
   const map: Record<string, string> = {
-    attendance: '📅', task: '📋', academic: '📘', praise: '🌟',
+    // attendance: '📅',  // removed – attendance module removed
+    task: '📋', academic: '📘', praise: '🌟',
   };
   return map[type] ?? '💡';
 }
@@ -127,8 +128,8 @@ export default function ParentDashboard() {
   const studentName    = data?.student?.full_name  ?? '';
   const className      = data?.student?.class_name ?? '';
   const section        = data?.student?.section    ?? '';
-  const attendancePct  = data?.attendance_trend?.percentage ?? '—';
-  const attendanceHeat = data?.attendance_heat ?? '';
+  // const attendancePct  = data?.attendance_trend?.percentage ?? '—'; // removed – attendance module removed
+  // const attendanceHeat = data?.attendance_heat ?? '';               // removed – attendance module removed
   const pendingCount   = data?.daily_summary?.assignments_pending ?? 0;
   const noticesCount   = data?.daily_summary?.notices_today ?? 0;
   const alerts         = (data?.alerts                ?? []) as any[];
@@ -153,10 +154,17 @@ export default function ParentDashboard() {
     : null;
   const displayAvg = avgScore ?? computedAvg;
 
-  const attSubLabel =
-    attendanceHeat === 'GOOD'            ? 'On track' :
-    attendanceHeat === 'AVERAGE'         ? 'Needs improvement' :
-    attendanceHeat === 'NEEDS ATTENTION' ? 'Below threshold' : '';
+  // Learning Progress card (replaces Attendance stat)
+  const assignmentCompletion = data?.assignment_completion_pct ?? null;
+  const learningValue =
+    assignmentCompletion !== null ? `${assignmentCompletion}%` :
+    displayAvg          !== null ? `${displayAvg}%`           : '—';
+  const learningLabel =
+    assignmentCompletion !== null
+      ? (assignmentCompletion >= 80 ? 'Strong completion' : assignmentCompletion >= 60 ? 'Good progress' : 'Needs follow-up')
+      : displayAvg !== null
+        ? (displayAvg >= 70 ? 'Active engagement' : 'Review recommended')
+        : 'Tracking progress';
 
   return (
     <div className="min-h-full flex flex-col bg-[#F9FAFB] text-gray-800 font-sans">
@@ -203,8 +211,8 @@ export default function ParentDashboard() {
               {/* ── Row 1: Quick Stats ── */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <StatCard
-                  icon="📅" label="Attendance" value={attendancePct}
-                  sub={attSubLabel} href="/parent/attendance" iconBg="bg-orange-50"
+                  icon="📈" label="Learning Progress" value={learningValue}
+                  sub={learningLabel} iconBg="bg-purple-50"
                 />
                 <StatCard
                   icon="📋" label="Pending Tasks" value={pendingCount}

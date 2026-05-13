@@ -211,33 +211,39 @@ export const sendConversationMessage = async (
   return response.data;
 };
 
-export const fetchAttendanceData = async (studentId: number) => {
-  try {
-    const response = await api.get(`/attendance/${studentId}`);
-    return response.data;
-  } catch { return null; }
-};
-
-export const fetchLeaveRequests = async (studentId: number) => {
-  try {
-    const response = await api.get(`/attendance/leave-requests/${studentId}`);
-    return response.data;
-  } catch { return []; }
-};
-
-export const submitLeaveRequest = async (payload: {
-  student_id: number;
-  parent_id: number;
-  from_date: string;
-  to_date: string;
-  reason: string;
-  parent_note?: string;
-}) => {
-  const response = await api.post('/attendance/leave-request', payload);
-  return response.data;
-};
-
-export const updateLeaveStatus = async (leaveRequestId: number, status: string, reviewedBy: number) => {
-  const response = await api.patch(`/attendance/leave-request/${leaveRequestId}`, { status, reviewed_by: reviewedBy });
-  return response.data;
-};
+// DISABLED: Attendance API helpers ───────────────────────────────────────
+// Attendance module has been removed from the parent portal.
+// These functions are preserved for reference; restore together with
+// the attendance page and backend router if the module is reinstated.
+//
+// export const fetchAttendanceData = async (studentId: number) => {
+//   try {
+//     const response = await api.get(`/attendance/${studentId}`);
+//     return response.data;
+//   } catch { return null; }
+// };
+//
+// export const fetchLeaveRequests = async (studentId: number) => {
+//   try {
+//     const response = await api.get(`/attendance/leave-requests/${studentId}`);
+//     return response.data;
+//   } catch { return []; }
+// };
+//
+// export const submitLeaveRequest = async (payload: {
+//   student_id: number;
+//   parent_id: number;
+//   from_date: string;
+//   to_date: string;
+//   reason: string;
+//   parent_note?: string;
+// }) => {
+//   const response = await api.post('/attendance/leave-request', payload);
+//   return response.data;
+// };
+//
+// export const updateLeaveStatus = async (leaveRequestId: number, status: string, reviewedBy: number) => {
+//   const response = await api.patch(`/attendance/leave-request/${leaveRequestId}`, { status, reviewed_by: reviewedBy });
+//   return response.data;
+// };
+// ──────────────────────────────────────────────────────────────────────────

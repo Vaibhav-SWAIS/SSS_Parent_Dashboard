@@ -16,6 +16,7 @@ import {
   MagnifyingGlassIcon,
   PaperAirplaneIcon,
   XMarkIcon,
+  MicrophoneIcon,
 } from '@heroicons/react/24/outline';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -54,7 +55,7 @@ interface Recipient {
 
 const CATEGORIES = [
   'Academic',
-  'Attendance',
+  'Leave Request',
   'Homework',
   'Behavior',
   'Exam / Test',
@@ -62,30 +63,96 @@ const CATEGORIES = [
   'Fees',
   'General Enquiry',
   'PTM Request',
-  'Leave Clarification',
+  // 'Attendance',          // removed – attendance module removed from portal
+  // 'Leave Clarification', // consolidated into Leave Request
 ];
 
 const CATEGORY_COLOR: Record<string, string> = {
-  'Academic':          'bg-blue-100 text-blue-700',
-  'Attendance':        'bg-yellow-100 text-yellow-700',
-  'Homework':          'bg-purple-100 text-purple-700',
-  'Behavior':          'bg-orange-100 text-orange-700',
-  'Exam / Test':       'bg-red-100 text-red-600',
-  'Transport':         'bg-teal-100 text-teal-700',
-  'Fees':              'bg-green-100 text-green-700',
-  'General Enquiry':   'bg-gray-100 text-gray-600',
-  'PTM Request':       'bg-pink-100 text-pink-700',
-  'Leave Clarification':'bg-indigo-100 text-indigo-700',
+  'Academic':        'bg-blue-100 text-blue-700',
+  'Leave Request':   'bg-teal-100 text-teal-700',
+  'Homework':        'bg-purple-100 text-purple-700',
+  'Behavior':        'bg-orange-100 text-orange-700',
+  'Exam / Test':     'bg-red-100 text-red-600',
+  'Transport':       'bg-sky-100 text-sky-700',
+  'Fees':            'bg-green-100 text-green-700',
+  'General Enquiry': 'bg-gray-100 text-gray-600',
+  'PTM Request':     'bg-pink-100 text-pink-700',
 };
 
-const FILTER_TABS = ['All', 'Unread', 'Academic', 'Attendance', 'General Enquiry'];
+const FILTER_TABS = ['All', 'Unread', 'Academic', 'Leave Request', 'General Enquiry'];
+
+// Speech recognition language codes for supported languages
+const SPEECH_LANG_MAP: Record<string, string> = {
+  en: 'en-IN',
+  hi: 'hi-IN',
+  te: 'te-IN',
+  or: 'or-IN',
+};
+
+// ── Speech-to-Text Hook ───────────────────────────────────────────────────
+
+function useSpeechInput(language: string) {
+  const [activeField, setActiveField] = useState<string | null>(null);
+
+  function startFor(fieldKey: string, onResult: (text: string) => void) {
+    const SR =
+      (window as any).webkitSpeechRecognition ||
+      (window as any).SpeechRecognition;
+    if (!SR) {
+      alert('Speech recognition is not supported in this browser. Try Chrome or Edge.');
+      return;
+    }
+    const rec = new SR();
+    rec.lang = SPEECH_LANG_MAP[language] ?? 'en-IN';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (e: any) => {
+      onResult(e.results[0][0].transcript);
+      setActiveField(null);
+    };
+    rec.onerror = () => setActiveField(null);
+    rec.onend   = () => setActiveField(null);
+    rec.start();
+    setActiveField(fieldKey);
+  }
+
+  return { activeField, startFor };
+}
+
+// ── Mic Button ────────────────────────────────────────────────────────────
+
+function MicBtn({
+  fieldKey,
+  activeField,
+  onClick,
+}: {
+  fieldKey: string;
+  activeField: string | null;
+  onClick: () => void;
+}) {
+  const active = activeField === fieldKey;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={active ? 'Listening…' : 'Speak to fill'}
+      className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 border ${
+        active
+          ? 'bg-red-50 border-red-200 text-red-500'
+          : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+      }`}
+    >
+      <MicrophoneIcon className={`w-4 h-4 ${active ? 'animate-pulse' : ''}`} />
+    </button>
+  );
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function timeAgo(iso: string | null): string {
   if (!iso) return '';
   try {
-    const diff = Date.now() - new Date(iso).getTime();
+    const diff  = Date.now() - new Date(iso).getTime();
     const mins  = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days  = Math.floor(diff / 86400000);
@@ -100,34 +167,50 @@ function timeAgo(iso: string | null): string {
 function msgTime(iso: string): string {
   if (!iso) return '';
   try {
-    const d = new Date(iso);
+    const d   = new Date(iso);
     const now = new Date();
     const sameDay =
       d.getDate() === now.getDate() &&
       d.getMonth() === now.getMonth() &&
       d.getFullYear() === now.getFullYear();
-    if (sameDay) return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) +
+    if (sameDay)
+      return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    return (
+      d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) +
       ' · ' +
-      d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    );
   } catch { return ''; }
 }
 
 function initials(name: string): string {
-  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  return name
+    .split(' ')
+    .slice(0, 2)
+    .map(w => w[0])
+    .join('')
+    .toUpperCase();
 }
 
 function categoryBadge(cat: string) {
   const cls = CATEGORY_COLOR[cat] ?? 'bg-gray-100 text-gray-600';
-  return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cls}`}>{cat}</span>;
+  return (
+    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cls}`}>
+      {cat}
+    </span>
+  );
 }
 
 // ── Conversation List Item ─────────────────────────────────────────────────
 
 function ConvItem({
-  conv, selected, onClick,
+  conv,
+  selected,
+  onClick,
 }: {
-  conv: Conversation; selected: boolean; onClick: () => void;
+  conv: Conversation;
+  selected: boolean;
+  onClick: () => void;
 }) {
   const isParentLast = conv.latest_sender === 'PARENT';
   return (
@@ -140,20 +223,28 @@ function ConvItem({
       }`}
     >
       <div className="flex items-start gap-3">
-        {/* Avatar */}
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-xs font-black shrink-0 mt-0.5">
           {initials(conv.recipient_name)}
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-center gap-1">
-            <p className="text-sm font-semibold text-gray-900 truncate">{conv.recipient_name}</p>
-            <span className="text-[10px] text-gray-400 shrink-0">{timeAgo(conv.latest_message_time ?? conv.updated_at)}</span>
+            <p className="text-sm font-semibold text-gray-900 truncate">
+              {conv.recipient_name}
+            </p>
+            <span className="text-[10px] text-gray-400 shrink-0">
+              {timeAgo(conv.latest_message_time ?? conv.updated_at)}
+            </span>
           </div>
           <p className="text-xs text-gray-500 truncate mt-0.5">{conv.subject}</p>
           <div className="flex items-center justify-between mt-1 gap-2">
-            <p className={`text-[11px] truncate flex-1 ${conv.unread_count > 0 ? 'font-semibold text-gray-800' : 'text-gray-400'}`}>
-              {isParentLast ? 'You: ' : ''}{conv.latest_message ?? 'No messages yet'}
+            <p
+              className={`text-[11px] truncate flex-1 ${
+                conv.unread_count > 0 ? 'font-semibold text-gray-800' : 'text-gray-400'
+              }`}
+            >
+              {isParentLast ? 'You: ' : ''}
+              {conv.latest_message ?? 'No messages yet'}
             </p>
             {conv.unread_count > 0 && (
               <span className="w-4 h-4 rounded-full bg-orange-500 text-white text-[9px] font-black flex items-center justify-center shrink-0">
@@ -173,9 +264,12 @@ function MessageBubble({ msg }: { msg: Message }) {
   const isParent = msg.sender_type === 'PARENT';
   return (
     <div className={`flex flex-col ${isParent ? 'items-end' : 'items-start'} mb-4`}>
-      {/* Sender label */}
       <div className={`flex items-center gap-1.5 mb-1 ${isParent ? 'flex-row-reverse' : ''}`}>
-        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black text-white shrink-0 ${isParent ? 'bg-gray-700' : 'bg-orange-500'}`}>
+        <div
+          className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black text-white shrink-0 ${
+            isParent ? 'bg-gray-700' : 'bg-orange-500'
+          }`}
+        >
           {initials(msg.sender_name)}
         </div>
         <span className="text-[11px] font-semibold text-gray-500">{msg.sender_name}</span>
@@ -183,7 +277,6 @@ function MessageBubble({ msg }: { msg: Message }) {
         <span className="text-[10px] text-gray-400">{msgTime(msg.created_at)}</span>
       </div>
 
-      {/* Bubble */}
       <div
         className={`max-w-[78%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
           isParent
@@ -201,27 +294,47 @@ function MessageBubble({ msg }: { msg: Message }) {
 
 function NewConversationModal({
   studentId,
+  language,
   recipients,
   onClose,
   onCreate,
 }: {
   studentId: number;
+  language: string;
   recipients: Recipient[];
   onClose: () => void;
   onCreate: (conv: Conversation) => void;
 }) {
-  const [step, setStep]             = useState<1 | 2>(1);
-  const [recipient, setRecipient]   = useState<Recipient | null>(null);
-  const [category, setCategory]     = useState('Academic');
-  const [subject, setSubject]       = useState('');
-  const [firstMsg, setFirstMsg]     = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError]           = useState('');
+  const [recipient,   setRecipient]   = useState<Recipient | null>(null);
+  const [category,    setCategory]    = useState('Academic');
+  const [subject,     setSubject]     = useState('');
+  const [firstMsg,    setFirstMsg]    = useState('');
+  const [leaveFrom,   setLeaveFrom]   = useState('');
+  const [leaveTo,     setLeaveTo]     = useState('');
+  const [submitting,  setSubmitting]  = useState(false);
+  const [error,       setError]       = useState('');
+
+  const { activeField, startFor } = useSpeechInput(language);
+
+  const isLeaveRequest = category === 'Leave Request';
+
+  const buildFirstMessage = (): string => {
+    if (!isLeaveRequest) return firstMsg.trim();
+    const parts: string[] = [];
+    if (leaveFrom && leaveTo) {
+      parts.push(`Leave period: ${leaveFrom} to ${leaveTo}.`);
+    } else if (leaveFrom) {
+      parts.push(`Leave date: ${leaveFrom}.`);
+    }
+    if (firstMsg.trim()) parts.push(firstMsg.trim());
+    return parts.join('\n');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!recipient || !subject.trim() || !firstMsg.trim()) {
-      setError('Please fill all fields.');
+    const finalMsg = buildFirstMessage();
+    if (!recipient || !subject.trim() || !finalMsg) {
+      setError('Please fill all required fields.');
       return;
     }
     setSubmitting(true);
@@ -233,7 +346,7 @@ function NewConversationModal({
         subject:        subject.trim(),
         category,
         recipient_name: recipient.name,
-        first_message:  firstMsg.trim(),
+        first_message:  finalMsg,
       });
       onCreate(conv);
     } catch {
@@ -243,27 +356,40 @@ function NewConversationModal({
     }
   };
 
+  const subjectPlaceholder = isLeaveRequest
+    ? 'e.g. Riya Sharma Leave Request'
+    : 'e.g. Question about last week\'s Mathematics homework';
+
+  const msgPlaceholder = isLeaveRequest
+    ? 'Describe the reason for leave (e.g. Medical appointment, Family function…)'
+    : 'Write your message here…';
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
+        <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 shrink-0">
           <div>
             <h3 className="font-bold text-gray-900">Start a Conversation</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Reach out to a teacher or school department</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Reach out to a teacher or school department
+            </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Step 1: Select recipient */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
+          {/* Select recipient */}
           <div>
             <label className="text-xs font-semibold text-gray-600 block mb-2">
               Who would you like to contact?
             </label>
-            <div className="max-h-44 overflow-y-auto space-y-1.5 border border-gray-100 rounded-xl p-2">
+            <div className="max-h-40 overflow-y-auto space-y-1.5 border border-gray-100 rounded-xl p-2">
               {recipients.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-4">Loading…</p>
               ) : (
@@ -296,48 +422,109 @@ function NewConversationModal({
 
           {/* Category */}
           <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">Category</label>
+            <label className="text-xs font-semibold text-gray-600 block mb-1.5">
+              Category
+            </label>
             <select
               value={category}
               onChange={e => setCategory(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-100 bg-white"
             >
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {CATEGORIES.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
+
+          {/* Leave date range — shown only for Leave Request */}
+          {isLeaveRequest && (
+            <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 space-y-3">
+              <p className="text-xs font-semibold text-teal-700">
+                Leave Period{' '}
+                <span className="text-gray-400 font-normal">(optional)</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">From Date</label>
+                  <input
+                    type="date"
+                    value={leaveFrom}
+                    onChange={e => setLeaveFrom(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-100 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">To Date</label>
+                  <input
+                    type="date"
+                    value={leaveTo}
+                    min={leaveFrom}
+                    onChange={e => setLeaveTo(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-100 bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Subject */}
           <div>
             <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-              Topic / Subject <span className="text-red-400">*</span>
+              {isLeaveRequest ? 'Subject / Reference' : 'Topic / Subject'}{' '}
+              <span className="text-red-400">*</span>
             </label>
-            <input
-              required
-              type="text"
-              value={subject}
-              onChange={e => setSubject(e.target.value)}
-              placeholder="e.g. Question about last week's Mathematics homework"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-100"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                required
+                type="text"
+                value={subject}
+                onChange={e => setSubject(e.target.value)}
+                placeholder={subjectPlaceholder}
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-100"
+              />
+              <MicBtn
+                fieldKey="modal-subject"
+                activeField={activeField}
+                onClick={() =>
+                  startFor('modal-subject', text =>
+                    setSubject(prev => (prev ? `${prev} ${text}` : text))
+                  )
+                }
+              />
+            </div>
           </div>
 
-          {/* First message */}
+          {/* Message / Leave reason */}
           <div>
             <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-              Your Message <span className="text-red-400">*</span>
+              {isLeaveRequest ? 'Leave Reason' : 'Your Message'}{' '}
+              <span className="text-red-400">*</span>
             </label>
-            <textarea
-              required
-              rows={4}
-              value={firstMsg}
-              onChange={e => setFirstMsg(e.target.value)}
-              placeholder="Write your message here…"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-100 resize-none"
-            />
+            <div className="flex items-end gap-2">
+              <textarea
+                required
+                rows={4}
+                value={firstMsg}
+                onChange={e => setFirstMsg(e.target.value)}
+                placeholder={msgPlaceholder}
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-100 resize-none"
+              />
+              <MicBtn
+                fieldKey="modal-message"
+                activeField={activeField}
+                onClick={() =>
+                  startFor('modal-message', text =>
+                    setFirstMsg(prev => (prev ? `${prev} ${text}` : text))
+                  )
+                }
+              />
+            </div>
           </div>
 
           {error && (
-            <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>
+            <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+              {error}
+            </p>
           )}
 
           <button
@@ -345,7 +532,11 @@ function NewConversationModal({
             disabled={submitting || !recipient}
             className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-orange-200 text-white font-bold py-3 rounded-xl text-sm transition-colors"
           >
-            {submitting ? 'Sending…' : 'Send Message'}
+            {submitting
+              ? 'Sending…'
+              : isLeaveRequest
+              ? 'Submit Leave Request'
+              : 'Send Message'}
           </button>
         </form>
       </div>
@@ -366,12 +557,15 @@ export default function CommunicationCenterPage() {
   const [reply,         setReply]         = useState('');
   const [sending,       setSending]       = useState(false);
 
-  const [filter,        setFilter]        = useState('All');
-  const [search,        setSearch]        = useState('');
-  const [showModal,     setShowModal]     = useState(false);
-  const [recipients,    setRecipients]    = useState<Recipient[]>([]);
+  const [filter,     setFilter]     = useState('All');
+  const [search,     setSearch]     = useState('');
+  const [showModal,  setShowModal]  = useState(false);
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Speech input for the reply area (uses current language)
+  const { activeField, startFor } = useSpeechInput(language);
 
   // Load conversations
   const loadConversations = useCallback(async () => {
@@ -390,14 +584,12 @@ export default function CommunicationCenterPage() {
     loadConversations();
   }, [loadConversations]);
 
-  // Load recipients for modal
   useEffect(() => {
     if (showModal && recipients.length === 0) {
       fetchConversationRecipients(studentId).then(setRecipients);
     }
   }, [showModal, studentId, recipients.length]);
 
-  // Load messages when conversation selected
   useEffect(() => {
     if (!selected) return;
     const load = async () => {
@@ -412,7 +604,6 @@ export default function CommunicationCenterPage() {
     load();
   }, [selected]);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -422,16 +613,25 @@ export default function CommunicationCenterPage() {
     if (!reply.trim() || !selected || sending) return;
     setSending(true);
     try {
-      const msg = await sendConversationMessage(selected.conv_id, 'PARENT', 'Parent', reply.trim());
+      const msg = await sendConversationMessage(
+        selected.conv_id,
+        'PARENT',
+        'Parent',
+        reply.trim(),
+      );
       setMessages(prev => [...prev, msg]);
       setReply('');
-      // Optimistically update list
       setConversations(prev =>
         prev.map(c =>
           c.conv_id === selected.conv_id
-            ? { ...c, latest_message: reply.trim(), latest_sender: 'PARENT', latest_message_time: new Date().toISOString() }
-            : c
-        )
+            ? {
+                ...c,
+                latest_message: reply.trim(),
+                latest_sender: 'PARENT',
+                latest_message_time: new Date().toISOString(),
+              }
+            : c,
+        ),
       );
     } finally {
       setSending(false);
@@ -445,20 +645,25 @@ export default function CommunicationCenterPage() {
     setRecipients([]);
   };
 
-  // Filtered list
   const filtered = conversations.filter(c => {
     if (filter === 'Unread' && c.unread_count === 0) return false;
     if (filter !== 'All' && filter !== 'Unread' && c.category !== filter) return false;
-    if (search && !c.subject.toLowerCase().includes(search.toLowerCase()) &&
-        !c.recipient_name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (
+      search &&
+      !c.subject.toLowerCase().includes(search.toLowerCase()) &&
+      !c.recipient_name.toLowerCase().includes(search.toLowerCase())
+    )
+      return false;
     return true;
   });
 
   return (
     <div className="min-h-full flex flex-col bg-[#F9FAFB] text-gray-800 font-sans">
       <TopBar
-        studentId={studentId} setStudentId={setStudentId}
-        language={language}   setLanguage={setLanguage}
+        studentId={studentId}
+        setStudentId={setStudentId}
+        language={language}
+        setLanguage={setLanguage}
         isLoading={isLoading}
       />
 
@@ -564,9 +769,17 @@ export default function CommunicationCenterPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-bold text-gray-900 text-sm">{selected.recipient_name}</h3>
+                      <h3 className="font-bold text-gray-900 text-sm">
+                        {selected.recipient_name}
+                      </h3>
                       {categoryBadge(selected.category)}
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selected.status === 'OPEN' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          selected.status === 'OPEN'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
                         {selected.status}
                       </span>
                     </div>
@@ -588,21 +801,26 @@ export default function CommunicationCenterPage() {
                   </div>
                 ) : (
                   <>
-                    {/* Date divider at top */}
                     <div className="flex items-center gap-3 mb-6">
                       <div className="flex-1 h-px bg-gray-100" />
                       <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">
-                        {new Date(messages[0].created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {new Date(messages[0].created_at).toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
                       </span>
                       <div className="flex-1 h-px bg-gray-100" />
                     </div>
-                    {messages.map(m => <MessageBubble key={m.message_id} msg={m} />)}
+                    {messages.map(m => (
+                      <MessageBubble key={m.message_id} msg={m} />
+                    ))}
                     <div ref={messagesEndRef} />
                   </>
                 )}
               </div>
 
-              {/* Reply input */}
+              {/* Reply input with voice button */}
               <div className="px-4 py-3 border-t border-gray-100 bg-white shrink-0">
                 <form onSubmit={handleSend} className="flex gap-2 items-end">
                   <textarea
@@ -610,10 +828,22 @@ export default function CommunicationCenterPage() {
                     value={reply}
                     onChange={e => setReply(e.target.value)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e as any); }
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend(e as any);
+                      }
                     }}
                     placeholder="Write a message to the teacher…"
                     className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-100 resize-none transition-all"
+                  />
+                  <MicBtn
+                    fieldKey="reply"
+                    activeField={activeField}
+                    onClick={() =>
+                      startFor('reply', text =>
+                        setReply(prev => (prev ? `${prev} ${text}` : text))
+                      )
+                    }
                   />
                   <button
                     type="submit"
@@ -623,7 +853,9 @@ export default function CommunicationCenterPage() {
                     <PaperAirplaneIcon className="w-4 h-4" />
                   </button>
                 </form>
-                <p className="text-[10px] text-gray-300 mt-1.5 ml-1">Press Enter to send · Shift+Enter for new line</p>
+                <p className="text-[10px] text-gray-300 mt-1.5 ml-1">
+                  Press Enter to send · Shift+Enter for new line
+                </p>
               </div>
             </>
           )}
@@ -634,8 +866,12 @@ export default function CommunicationCenterPage() {
       {showModal && (
         <NewConversationModal
           studentId={studentId}
+          language={language}
           recipients={recipients}
-          onClose={() => { setShowModal(false); setRecipients([]); }}
+          onClose={() => {
+            setShowModal(false);
+            setRecipients([]);
+          }}
           onCreate={handleConversationCreated}
         />
       )}
