@@ -204,7 +204,7 @@ export default function TopBar({
     setShowProfile(false);
     setShowToast(true);
     setTimeout(() => {
-       window.location.replace('https://staging.sgs.swais.in');
+       window.location.replace('https://staging.sss.swais.in');
     }, 1000);
   };
 

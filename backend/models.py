@@ -494,7 +494,7 @@ class TicketMessage(Base):
 #     student_info = relationship("StudentMaster")
 
 # ── 15. Assessment ────────────────────────────────────────────────────────────
-# Mirrors sgs_assessments exactly — column names unchanged.
+# Mirrors sss_assessments exactly — column names unchanged.
 # assessment_type: PostgreSQL ENUM that already exists on RDS.
 # create_type=False → SQLAlchemy never attempts CREATE TYPE; it uses the
 # existing type and emits the correct cast on INSERT.
@@ -529,7 +529,7 @@ class Assessment(Base):
 
 
 # ── 16. AssessmentResult ──────────────────────────────────────────────────────
-# Mirrors sgs_assessment_results exactly — column names unchanged.
+# Mirrors sss_assessment_results exactly — column names unchanged.
 
 class AssessmentResult(Base):
     __tablename__ = f"{DB_PREFIX}assessment_results"
