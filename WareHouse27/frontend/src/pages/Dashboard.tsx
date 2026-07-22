@@ -212,49 +212,10 @@ function Dashboard() {
                 />
 
 
-            </div>
 
 
 
-
-
-            <div className="dashboard-section">
-
-
-                <h2>
-                    Quick Actions
-                </h2>
-
-
-                <div className="action-buttons">
-
-
-                    <button className="btn">
-
-                        Inventory
-
-                    </button>
-
-
-                    <button className="btn">
-
-                        Food Tokens
-
-                    </button>
-
-
-                    <button className="btn">
-
-                        Replenishment Tickets
-
-                    </button>
-
-
-                    <button className="btn">
-
-                        AI Recommendations
-
-                    </button>
+               
 
 
 
@@ -266,8 +227,7 @@ function Dashboard() {
 
 
 
-        </div>
-
+        
     );
 
 

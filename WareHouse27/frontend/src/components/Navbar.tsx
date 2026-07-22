@@ -6,7 +6,7 @@ function Navbar() {
       </div>
 
       <div className="user-info">
-        <span>Warehouse Manager</span>
+        <span>Welcome, Warehouse Manager</span>
       </div>
     </div>
   );

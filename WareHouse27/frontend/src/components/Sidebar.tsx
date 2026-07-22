@@ -4,10 +4,15 @@ function Sidebar() {
   return (
     <div className="sidebar">
 
-      <h2>SWAIS-VANIJYA</h2>
+  <div className="sidebar-header">
+    <h2>SWAIS-VANIJYA</h2>
+    <p className="sidebar-caption">
+      SWAIS DEMO Warehouse
+    </p>
+  </div>
 
-
-      <ul>
+  <ul>
+    
 
         <li>
           <NavLink
