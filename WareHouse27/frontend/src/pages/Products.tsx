@@ -58,7 +58,7 @@ function Products() {
 
             <div className="page-header">
 
-                <h1>Grocery Products</h1>
+                <h1>Electronic & Grocery Products</h1>
 
                 <button
                     className="btn"
@@ -87,7 +87,7 @@ function Products() {
 
                         weight={product.weight}
 
-                        image={product.image ?? undefined}
+                    
 
                     />
 

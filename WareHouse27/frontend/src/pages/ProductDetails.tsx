@@ -2,187 +2,111 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import API from "../services/api";
 import Loader from "../components/Loader";
-import ProductGallery from "../components/ProductGallery";
 
 interface Product {
-
-    product_id: number;
-    sku_code: string;
-    product_name: string;
-    category: string;
-    unit: string;
-    brand: string;
-    price: number;
-    weight: number;
-    length_cm: number;
-    width_cm: number;
-    height_cm: number;
-
-}
-
-interface ProductImage {
-
-    image_id: number;
-    image_url: string;
-    display_order: number;
-    is_primary: boolean;
-
+  product_id: number;
+  sku_code: string;
+  product_name: string;
+  category: string;
+  unit: string;
+  brand: string;
+  price: number;
+  weight: number;
+  length_cm: number;
+  width_cm: number;
+  height_cm: number;
 }
 
 function ProductDetails() {
+  const { id } = useParams();
 
-    const { id } = useParams();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
 
-    const [product, setProduct] = useState<Product | null>(null);
+  useEffect(() => {
+    loadProduct();
+  }, [id]);
 
-    const [images, setImages] = useState<ProductImage[]>([]);
+  const loadProduct = async () => {
+    setLoading(true);
 
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-
-        loadProduct();
-
-    }, [id]);
-
-    const loadProduct = async () => {
-
-        try {
-
-            const productResponse =
-                await API.get(`/products/${id}`);
-
-            const imageResponse =
-                await API.get(`/products/${id}/images`);
-
-            setProduct(productResponse.data);
-
-            setImages(imageResponse.data);
-
-        } catch (error) {
-
-            console.error(error);
-
-        } finally {
-
-            setLoading(false);
-
-        }
-
-    };
-
-    if (loading) {
-
-        return <Loader />;
-
+    try {
+      const response = await API.get(`/products/${id}`);
+      setProduct(response.data);
+    } catch (error) {
+      console.error("Product API Error:", error);
+      setProduct(null);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    if (!product) {
+  if (loading) {
+    return <Loader />;
+  }
 
-        return <h2>Product not found.</h2>;
+  if (!product) {
+    return <h2>Product not found.</h2>;
+  }
 
-    }
+  return (
+    <div className="product-details">
+      <div className="product-info">
 
-    return (
+        <h1>{product.product_name}</h1>
 
-        <div className="product-details">
+        <table>
+          <tbody>
+            <tr>
+              <td><strong>SKU</strong></td>
+              <td>{product.sku_code}</td>
+            </tr>
 
-            <div>
+            <tr>
+              <td><strong>Category</strong></td>
+              <td>{product.category}</td>
+            </tr>
 
-                <ProductGallery images={images} />
+            <tr>
+              <td><strong>Brand</strong></td>
+              <td>{product.brand || "-"}</td>
+            </tr>
 
-            </div>
+            <tr>
+              <td><strong>Unit</strong></td>
+              <td>{product.unit || "-"}</td>
+            </tr>
 
-            <div className="product-info">
+            <tr>
+              <td><strong>Price</strong></td>
+              <td>{product.price ? `₹ ${product.price}` : "-"}</td>
+            </tr>
 
-                <h1>{product.product_name}</h1>
+            <tr>
+              <td><strong>Weight</strong></td>
+              <td>{product.weight} Kg</td>
+            </tr>
 
-                <table>
+            <tr>
+              <td><strong>Length</strong></td>
+              <td>{product.length_cm} cm</td>
+            </tr>
 
-                    <tbody>
+            <tr>
+              <td><strong>Width</strong></td>
+              <td>{product.width_cm} cm</td>
+            </tr>
 
-                        <tr>
+            <tr>
+              <td><strong>Height</strong></td>
+              <td>{product.height_cm} cm</td>
+            </tr>
+          </tbody>
+        </table>
 
-                            <td>SKU</td>
-
-                            <td>{product.sku_code}</td>
-
-                        </tr>
-
-                        <tr>
-
-                            <td>Category</td>
-
-                            <td>{product.category}</td>
-
-                        </tr>
-
-                        <tr>
-
-                            <td>Brand</td>
-
-                            <td>{product.brand}</td>
-
-                        </tr>
-
-                        <tr>
-
-                            <td>Unit</td>
-
-                            <td>{product.unit}</td>
-
-                        </tr>
-
-                        <tr>
-
-                            <td>Price</td>
-
-                            <td>₹ {product.price}</td>
-
-                        </tr>
-
-                        <tr>
-
-                            <td>Weight</td>
-
-                            <td>{product.weight} Kg</td>
-
-                        </tr>
-
-                        <tr>
-
-                            <td>Length</td>
-
-                            <td>{product.length_cm} cm</td>
-
-                        </tr>
-
-                        <tr>
-
-                            <td>Width</td>
-
-                            <td>{product.width_cm} cm</td>
-
-                        </tr>
-
-                        <tr>
-
-                            <td>Height</td>
-
-                            <td>{product.height_cm} cm</td>
-
-                        </tr>
-
-                    </tbody>
-
-                </table>
-
-            </div>
-
-        </div>
-
-    );
-
+      </div>
+    </div>
+  );
 }
 
 export default ProductDetails;
