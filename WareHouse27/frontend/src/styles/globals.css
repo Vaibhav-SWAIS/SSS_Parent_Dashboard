@@ -63,38 +63,56 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
 SIDEBAR
 =========================== */
 
-.sidebar{
-width:260px;
-background:#123456;
-color:white;
-padding:20px;
+.sidebar {
+    width: 260px;
+    height: 100vh;
+    background: #123456;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
-.sidebar h2{
-margin-bottom:25px;
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    flex-shrink: 0;
 }
 
-.sidebar ul{
-list-style:none;
+.sidebar-header h2 {
+    margin-bottom: 6px;
+    font-size: 22px;
 }
 
-.sidebar li{
-margin-bottom:12px;
+.sidebar-caption {
+    font-size: 13px;
+    color: #cfd8dc;
 }
 
-.sidebar a{
-display:block;
-padding:12px;
-border-radius:6px;
-transition:.3s;
+.sidebar ul {
+    list-style: none;
+    padding: 15px;
+    overflow-y: auto;
+    flex: 1;
 }
 
-.sidebar a:hover{
-background:#1f4e79;
+.sidebar li {
+    margin-bottom: 8px;
 }
 
-.sidebar .active{
-background:#2196F3;
+.sidebar a {
+    display: block;
+    padding: 10px 14px;
+    border-radius: 6px;
+    transition: 0.3s;
+}
+
+.sidebar a:hover {
+    background: #1f4e79;
+}
+
+.sidebar .active {
+    background: #2196F3;
 }
 
 /* ===========================
