@@ -4,15 +4,14 @@ function Sidebar() {
   return (
     <div className="sidebar">
 
-  <div className="sidebar-header">
-    <h2>SWAIS-VANIJYA</h2>
-    <p className="sidebar-caption">
-      SWAIS DEMO Warehouse
-    </p>
-  </div>
+      <div className="sidebar-header">
+        <h2>SWAIS-VANIJYA</h2>
+        <p className="sidebar-caption">
+          SWAIS DEMO Warehouse
+        </p>
+      </div>
 
-  <ul>
-    
+      <ul>
 
         <li>
           <NavLink
@@ -52,9 +51,9 @@ function Sidebar() {
         </li>
 
         <li>
-        <Link to="/tickets">
-             Replenishment Tickets
-        </Link>
+          <Link to="/tickets">
+            Replenishment Tickets
+          </Link>
         </li>
 
         <li>
@@ -65,60 +64,53 @@ function Sidebar() {
             Model Performance
           </NavLink>
         </li>
-<li>
 
-<Link to="/picking">
+        <li>
+          <Link to="/picking">
+            Picking
+          </Link>
+        </li>
 
-Picking
+        <li>
+          <Link to="/gate-pass">
+            Gate Pass
+          </Link>
+        </li>
 
-</Link>
+        <li>
+          <Link to="/receipt">
+            Receipt
+          </Link>
+        </li>
 
-</li>
-<li>
+        <li>
+          <Link to="/canteen-ledger">
+            Canteen Ledger
+          </Link>
+        </li>
 
-    <Link to="/gate-pass">
+        <li>
+          <Link to="/food-tokens">
+            Food Tokens
+          </Link>
+        </li>
 
-        Gate Pass
+        <li>
+          <Link to="/next-day-requirements">
+            Next Day Requirements
+          </Link>
+        </li>
 
-    </Link>
+        {/* New Products Menu */}
+        <li>
+          <NavLink
+            to="/products"
+            className={({ isActive }) => (isActive ? "active" : "")}
+          >
+            Products
+          </NavLink>
+        </li>
 
-</li>
-<li>
-
-    <Link to="/receipt">
-
-        Receipt
-
-    </Link>
-
-</li>
-<li>
-
-    <Link to="/canteen-ledger">
-
-        Canteen Ledger
-
-    </Link>
-
-</li>
-<li>
-
-<Link to="/food-tokens">
-
-Food Tokens
-
-</Link>
-
-</li>
-<li>
-
-    <Link to="/next-day-requirements">
-
-        Next Day Requirements
-
-    </Link>
-
-</li>
         <li>
           <NavLink
             to="/configuration"
