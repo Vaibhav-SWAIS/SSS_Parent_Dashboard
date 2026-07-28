@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { translateText as aiTranslateText } from "@/lib/aiService";
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000',
@@ -66,15 +67,44 @@ export const fetchNoticesHistory = async (studentId: number) => {
 //   return response.data;
 // };
 
-export const translateText = async (text: string, targetLang: string) => {
-  if (!text) return { translated_text: text, original_text: text };
-  if (targetLang === 'en') return { translated_text: text, original_text: text };
-  
-  const response = await api.post('/translate', {
-    text,
-    target_lang: targetLang,
-  });
-  return response.data;
+export const translateText = async (
+  text: string,
+  targetLang: string
+) => {
+  if (!text) {
+    return {
+      translated_text: text,
+      original_text: text,
+    };
+  }
+
+  if (targetLang === "en") {
+    return {
+      translated_text: text,
+      original_text: text,
+    };
+  }
+
+  try {
+    const response = await aiTranslateText(text, targetLang);
+
+    return {
+      translated_text:
+        response.translated_text ??
+        response.translation ??
+        response.text ??
+        text,
+
+      original_text: text,
+    };
+  } catch (error) {
+    console.error("Translation Error:", error);
+
+    return {
+      translated_text: text,
+      original_text: text,
+    };
+  }
 };
 
 // DISABLED: requestCall — POST /request-call backend route is commented out.

@@ -142,9 +142,7 @@ export default function QuizPerformancePage() {
               <h1 className="text-3xl font-black text-gray-900 leading-tight">Quiz Performance</h1>
               <p className="text-sm font-medium text-gray-500 mt-1">Overview of quiz results across all subjects.</p>
             </div>
-            <button className="self-start md:self-auto px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold text-sm rounded-xl hover:bg-gray-50 transition shadow-sm flex items-center gap-2">
-              <span>📥</span> Export
-            </button>
+          
           </div>
 
           {isLoading ? (

@@ -7,7 +7,13 @@ import {
 } from 'recharts';
 import TopBar from '@/components/TopBar';
 import { fetchAssessmentHistory } from '@/lib/api';
+import { 
+  fetchAssessmentSummary,
+  translateText,
+  textToVoice
+} from '@/lib/aiService';
 import { useDashboard } from '@/lib/DashboardContext';
+import { useTranslation } from '@/lib/multilingual';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,6 +69,63 @@ const TIMELINE_OPTIONS = [
   'Quarter 4',
   'Custom Date Range',
 ];
+const UI_TEXT = {
+  title: 'Assessments',
+  subtitle: "View your child's assessment history and academic performance.",
+
+  allSubjects: 'All Subjects',
+  allTime: 'All Time',
+  currentAcademicYear: 'Current Academic Year',
+  customDateRange: 'Custom Date Range',
+
+  from: 'From',
+  to: 'To',
+
+  totalAssessments: 'Total Assessments',
+  completed: 'Completed',
+
+  averagePercentage: 'Average Percentage',
+  overallPerformance: 'Overall performance',
+
+  highestScore: 'Highest Score',
+  topResult: 'Top result',
+
+  lowestScore: 'Lowest Score',
+  needsFocus: 'Needs focus',
+
+  performanceTrend: 'Performance Trend',
+  percentageOverTime: 'Percentage over time',
+
+  subjectWisePerformance: 'Subject-wise Performance',
+  averagePercentageBySubject: 'Average percentage by subject',
+
+  noDataForFilters: 'No data for selected filters',
+
+  noAssessments: 'No assessments found.',
+  adjustFilters: 'Try adjusting your subject or timeline filters.',
+
+  viewDetails: 'View Details',
+
+  assessmentInformation: 'Assessment Information',
+
+  subject: 'Subject',
+  chapter: 'Chapter',
+  teacher: 'Teacher',
+  assessmentType: 'Assessment Type',
+  date: 'Date',
+  maxMarks: 'Max Marks',
+
+  outOf: 'out of',
+  marks: 'marks',
+
+  aiPerformanceSummary: 'AI Performance Summary',
+  generatingAISummary: 'Generating AI summary...',
+  noAISummary: 'No AI summary available.',
+
+  performance: 'Performance',
+  encouragement: 'Encouragement',
+  homeSupportTips: 'Home Support Tips',
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -130,6 +193,25 @@ const SkeletonAssessmentCard = () => (
 export default function AssessmentsPage() {
   const { studentId, setStudentId, parentId, language, setLanguage } = useDashboard();
 
+    const uiTextList = useMemo(
+    () => Object.values(UI_TEXT),
+    [],
+  );
+
+  const {
+    displayed: translatedUI,
+    translating: translatingUI,
+  } = useTranslation(uiTextList, language);
+
+  const t = useMemo(() => {
+    const keys = Object.keys(UI_TEXT) as Array<keyof typeof UI_TEXT>;
+
+    return keys.reduce((result, key, index) => {
+      result[key] = translatedUI[index] ?? UI_TEXT[key];
+      return result;
+    }, {} as Record<keyof typeof UI_TEXT, string>);
+  }, [translatedUI]);
+
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [isLoading, setIsLoading]     = useState(true);
 
@@ -139,6 +221,47 @@ export default function AssessmentsPage() {
   const [customEnd,      setCustomEnd]      = useState('');
 
   const [modalData, setModalData] = useState<Assessment | null>(null);
+ const [aiSummary, setAiSummary] = useState<any>(null);
+  const [loadingAI, setLoadingAI] = useState(false);
+
+ useEffect(() => {
+ if (!modalData) {
+  setAiSummary(null);
+  return;
+}
+
+const loadSummary = async () => {
+  setLoadingAI(true);
+
+  try {
+    const response = await fetchAssessmentSummary({
+      student_name: "Student",
+      subject: modalData.subject,
+      test_name: modalData.title,
+      marks_obtained: modalData.marks_obtained,
+      total_marks: modalData.max_marks,
+      teacher_remarks: "",
+    });
+
+    console.log("Assessment Summary API Response:", response);
+
+    setAiSummary(
+      response.summary ??
+      response.ai_summary ??
+      response.result ??
+      response
+    );
+
+  } catch (err) {
+    console.error(err);
+    setAiSummary(null);
+  } finally {
+    setLoadingAI(false);
+  }
+};
+
+  loadSummary();
+}, [modalData]);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -267,9 +390,9 @@ export default function AssessmentsPage() {
 
           {/* ── HEADER ────────────────────────────────────────────────────── */}
           <div>
-            <h1 className="text-3xl font-black text-gray-900 leading-tight">Assessments</h1>
-            <p className="text-sm font-medium text-gray-500 mt-1">
-              View your child&apos;s assessment history and academic performance.
+           <h1 className="text-3xl font-black text-gray-900 leading-tight">{t.title}</h1>
+          <p className="text-sm font-medium text-gray-500 mt-1">
+            {t.subtitle}
             </p>
           </div>
 
@@ -345,24 +468,24 @@ export default function AssessmentsPage() {
               {/* ── SUMMARY CARDS ──────────────────────────────────────────── */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard
-                  label="Total Assessments"
+                  label={t.totalAssessments}
                   value={stats.total.toString()}
-                  sub="Completed"
+                  sub={t.completed}
                 />
                 <StatCard
-                  label="Average Percentage"
+                  label={t.averagePercentage}
                   value={`${stats.avg.toFixed(1)}%`}
-                  sub="Overall performance"
+                  sub={t.overallPerformance}
                 />
                 <StatCard
-                  label="Highest Score"
+                  label={t.highestScore}
                   value={`${stats.highest}%`}
-                  sub="Top result"
+                  sub={t.topResult}
                 />
                 <StatCard
-                  label="Lowest Score"
+                  label={t.lowestScore}
                   value={`${stats.lowest}%`}
-                  sub="Needs focus"
+                  sub={t.needsFocus}
                 />
               </div>
 
@@ -376,7 +499,7 @@ export default function AssessmentsPage() {
                       Performance Trend
                     </p>
                     <p className="text-sm font-bold text-gray-700 mb-4">
-                      Percentage over time
+                      {t.percentageOverTime}
                     </p>
                     <div style={{ height: 240 }}>
                       <ResponsiveContainer width="100%" height="100%">
@@ -422,10 +545,10 @@ export default function AssessmentsPage() {
                   {/* Chart 2 — Subject-wise Performance */}
                   <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
                     <p className="text-xs font-black uppercase tracking-wider text-gray-400 mb-1">
-                      Subject-wise Performance
+                      {t.subjectWisePerformance}
                     </p>
                     <p className="text-sm font-bold text-gray-700 mb-4">
-                      Average percentage by subject
+                      {t.averagePercentageBySubject}
                     </p>
                     {subjectData.length > 0 ? (
                       <div style={{ height: 240 }}>
@@ -468,7 +591,7 @@ export default function AssessmentsPage() {
                       </div>
                     ) : (
                       <div className="h-60 flex items-center justify-center text-gray-400 text-sm font-semibold">
-                        No data for selected filters
+                        {t.noDataForFilters}
                       </div>
                     )}
                   </div>
@@ -479,9 +602,9 @@ export default function AssessmentsPage() {
               {filtered.length === 0 ? (
                 <div className="py-20 text-center bg-white rounded-2xl border border-gray-200 border-dashed">
                   <p className="text-4xl mb-3">📋</p>
-                  <p className="text-gray-900 font-bold">No assessments found.</p>
+                  <p className="text-gray-900 font-bold"> {t.noAssessments}</p>
                   <p className="text-gray-400 text-sm mt-1">
-                    Try adjusting your subject or timeline filters.
+                    {t.adjustFilters}
                   </p>
                 </div>
               ) : (
@@ -548,7 +671,7 @@ export default function AssessmentsPage() {
                             onClick={() => setModalData(a)}
                             className="mt-3 w-full text-xs font-bold py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-colors"
                           >
-                            View Details
+                            {t.viewDetails}
                           </button>
                         </div>
                       </div>
@@ -619,16 +742,16 @@ export default function AssessmentsPage() {
                 {/* Assessment details grid */}
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-3">
-                    Assessment Information
+                    {t.assessmentInformation}
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: 'Subject',        value: normalizeSubject(modalData.subject) },
-                      { label: 'Chapter',        value: modalData.chapter_name },
-                      { label: 'Teacher',        value: modalData.teacher_name },
-                      { label: 'Assessment Type', value: modalData.assessment_type },
-                      { label: 'Date',           value: modalData.assessment_date },
-                      { label: 'Max Marks',      value: String(modalData.max_marks) },
+                      { label: t.subject,        value: normalizeSubject(modalData.subject) },
+                      { label: t.chapter,        value: modalData.chapter_name },
+                      { label: t.teacher,        value: modalData.teacher_name },
+                      { label: t.assessmentType, value: modalData.assessment_type },
+                      { label: t.date,           value: modalData.assessment_date },
+                      { label: t.maxMarks,      value: String(modalData.max_marks) },
                     ].map(({ label, value }) => (
                       <div key={label} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
@@ -639,22 +762,197 @@ export default function AssessmentsPage() {
                     ))}
                   </div>
                 </div>
+{/* ── AI PERFORMANCE SUMMARY ─────────────────────────────── */}
+<div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+  <div className="flex items-center justify-between gap-3 mb-3">
+    <div className="flex items-center gap-2">
+      <span className="text-lg">✨</span>
 
-                {/* AI Performance Summary — placeholder for future Gemini integration */}
-                <div className="rounded-2xl border border-dashed border-gray-200 p-4 bg-gray-50">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg">✨</span>
-                    <p className="text-sm font-black text-gray-700">AI Performance Summary</p>
-                    <span className="text-[10px] font-bold text-gray-400 bg-white border border-gray-200 px-2 py-0.5 rounded-full">
-                      Coming Soon
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-500 font-medium leading-relaxed">
-                    AI insights will be available in a future update. This section will provide
-                    personalised performance analysis, strengths, areas for improvement,
-                    and study recommendations.
-                  </p>
-                </div>
+      <p className="text-sm font-black text-orange-700">
+        {t.aiPerformanceSummary}
+      </p>
+    </div>
+
+    {/* AI Actions */}
+    {aiSummary && (
+      <div className="flex items-center gap-2">
+
+        {/* Translate */}
+        <button
+          onClick={async () => {
+            try {
+              const summaryText = `
+${aiSummary.summary_title ?? ''}
+
+Performance:
+${aiSummary.performance_breakdown ?? ''}
+
+Encouragement:
+${aiSummary.encouraging_feedback ?? ''}
+
+Home Support Tips:
+${aiSummary.home_support_tips ?? ''}
+              `.trim();
+
+              const translated = await translateText(
+                summaryText,
+                language
+              );
+
+              const translatedText =
+                translated?.translated_text ??
+                translated?.text ??
+                translated?.translation ??
+                '';
+
+              if (translatedText) {
+                setAiSummary({
+                  ...aiSummary,
+                  summary_title: translatedText,
+                  performance_breakdown: '',
+                  encouraging_feedback: '',
+                  home_support_tips: '',
+                });
+              }
+            } catch (error) {
+              console.error(
+                'Assessment summary translation failed:',
+                error
+              );
+            }
+          }}
+          className="px-3 py-1.5 rounded-lg text-xs font-bold border
+                     border-orange-200 bg-white text-orange-700
+                     hover:bg-orange-100 transition-colors"
+        >
+          🌐 Translate
+        </button>
+
+        {/* Listen */}
+        <button
+          onClick={async () => {
+            try {
+              const summaryText = `
+${aiSummary.summary_title ?? ''}
+
+Performance:
+${aiSummary.performance_breakdown ?? ''}
+
+Encouragement:
+${aiSummary.encouraging_feedback ?? ''}
+
+Home Support Tips:
+${aiSummary.home_support_tips ?? ''}
+              `.trim();
+
+              const audioResponse = await textToVoice(
+                summaryText,
+                language
+              );
+
+              // textToVoice returns a Blob
+              const audioUrl = URL.createObjectURL(audioResponse);
+
+              const audio = new Audio(audioUrl);
+
+              audio.onended = () => {
+                URL.revokeObjectURL(audioUrl);
+              };
+
+              await audio.play();
+
+            } catch (error) {
+              console.error(
+                'Assessment summary voice generation failed:',
+                error
+              );
+            }
+          }}
+          className="px-3 py-1.5 rounded-lg text-xs font-bold border
+                     border-orange-200 bg-white text-orange-700
+                     hover:bg-orange-100 transition-colors"
+        >
+          🔊 Listen
+        </button>
+
+      </div>
+    )}
+  </div>
+
+  {/* Loading */}
+  {loadingAI ? (
+    <div className="py-4">
+      <p className="text-sm font-semibold text-gray-500">
+        ✨ Generating AI summary...
+      </p>
+    </div>
+
+  ) : aiSummary ? (
+
+    /* AI Summary */
+    <div className="space-y-4">
+
+      {/* Summary Title */}
+      {aiSummary.summary_title && (
+        <div>
+          <h4 className="font-black text-orange-700">
+            {aiSummary.summary_title}
+          </h4>
+        </div>
+      )}
+
+      {/* Performance */}
+      {aiSummary.performance_breakdown && (
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+            {t.performance}
+          </p>
+
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+            {aiSummary.performance_breakdown}
+          </p>
+        </div>
+      )}
+
+      {/* Encouragement */}
+      {aiSummary.encouraging_feedback && (
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+            {t.encouragement}
+          </p>
+
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+            {aiSummary.encouraging_feedback}
+          </p>
+        </div>
+      )}
+
+      {/* Home Support */}
+      {aiSummary.home_support_tips && (
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+            {t.homeSupportTips}
+          </p>
+
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+            {aiSummary.home_support_tips}
+          </p>
+        </div>
+      )}
+
+    </div>
+
+  ) : (
+
+    /* Empty state */
+    <div className="py-3">
+      <p className="text-sm text-gray-500">
+        {t.noAISummary}
+      </p>
+    </div>
+
+  )}
+</div>
 
               </div>
             </div>
