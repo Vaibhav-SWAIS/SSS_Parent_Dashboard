@@ -3,11 +3,12 @@
 //   translateCached  – translate with module-level in-memory cache
 //   translateBatch   – batch translation helper
 //   useSpeechInput   – browser speech-to-text hook (webkitSpeechRecognition)
-//   useTTS           – browser text-to-speech hook (SpeechSynthesis) with voice fallback
+//   useTTS           – AI text-to-speech hook (Google TTS via /parent/speak endpoint)
 //   useTranslation   – convenience hook: manages translated-text state + loading flag
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { translateText } from './api';
+import { speakWithAI } from './aiService';
 
 // ── Language codes ────────────────────────────────────────────────────────
 
@@ -18,31 +19,33 @@ export const SPEECH_LANG_MAP: Record<string, string> = {
   or: 'or-IN',
 };
 
-// Fallback voice chains — tried left-to-right until a browser voice matches.
-// Telugu and Odia rarely have native browser voices; they fall back to Hindi
-// then English so speech always plays rather than failing silently.
-const VOICE_FALLBACKS: Record<string, string[]> = {
-  'te-IN': ['te-IN', 'te', 'hi-IN', 'hi', 'en-IN', 'en-US', 'en'],
-  'or-IN': ['or-IN', 'or', 'hi-IN', 'hi', 'en-IN', 'en-US', 'en'],
-  'hi-IN': ['hi-IN', 'hi', 'en-IN', 'en-US', 'en'],
-  'en-IN': ['en-IN', 'en-US', 'en-GB', 'en'],
-};
-
 // ── Translation cache (module-level, shared across all components) ────────
 
 const _cache = new Map<string, string>();
 
-export async function translateCached(text: string, lang: string): Promise<string> {
-  if (!text || !text.trim() || lang === 'en') return text;
+export async function translateCached(
+  text: string,
+  lang: string
+): Promise<string> {
+  if (!text || !text.trim() || lang === "en") return text;
+
   const key = `${lang}\x00${text}`;
-  if (_cache.has(key)) return _cache.get(key)!;
+
+  if (_cache.has(key)) {
+    return _cache.get(key)!;
+  }
+
   try {
     const result = await translateText(text, lang);
-    const translated = result?.translated_text || text;
+
+    const translated =
+    result?.translated_text ?? text;
+
     _cache.set(key, translated);
+
     return translated;
   } catch {
-    return text; // graceful fallback — original text if API fails
+    return text;
   }
 }
 
@@ -97,6 +100,56 @@ export function useTranslation(texts: string[], language: string) {
   return { displayed, translating };
 }
 
+// ── useTranslatedText — single-string translation, no English flash ───────
+// Wraps translateCached for one piece of text (e.g. AI insight response).
+// Holds `displayed` as null while the translation is in-flight so callers
+// can keep a loading state rather than briefly showing raw English.
+//
+// Two-cache model:
+//   AI cache (aiService.ts)        — stores original English AI response
+//   Translation cache (translateCached) — keyed by lang + text
+// Changing language never regenerates AI; only the translate endpoint is called.
+// Stale-request protection: `cancelled` flag set by effect cleanup discards
+// results from previous language or text changes.
+
+export function useTranslatedText(
+  text: string | null,
+  language: string,
+): { displayed: string | null; translating: boolean } {
+  const [displayed,   setDisplayed]   = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+
+  useEffect(() => {
+    if (text === null) {
+      setDisplayed(null);
+      setTranslating(false);
+      return;
+    }
+    if (language === 'en') {
+      setDisplayed(text);
+      setTranslating(false);
+      return;
+    }
+    let cancelled = false;
+    setDisplayed(null);   // hold until translated — prevents English flash
+    setTranslating(true);
+    translateCached(text, language)
+      .then(result => {
+        if (cancelled) return;
+        setDisplayed(result);
+        setTranslating(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDisplayed(text); // fallback to English if translation fails
+        setTranslating(false);
+      });
+    return () => { cancelled = true; };
+  }, [text, language]);
+
+  return { displayed, translating };
+}
+
 // ── Speech-to-text hook ───────────────────────────────────────────────────
 // Uses webkitSpeechRecognition (Chrome/Edge) with SpeechRecognition fallback.
 // `activeField` holds the key of the currently listening field (or null).
@@ -132,124 +185,134 @@ export function useSpeechInput(language: string) {
   return { activeField, startFor };
 }
 
-// ── Voice picker (TTS) ────────────────────────────────────────────────────
-// Walks the fallback chain for the target BCP-47 tag until a browser voice
-// is found. Logs selection and fallback usage to the console.
-
-function pickVoice(
-  voices: SpeechSynthesisVoice[],
-  targetLang: string,
-): { voice: SpeechSynthesisVoice | null; isFallback: boolean } {
-  const chain = VOICE_FALLBACKS[targetLang] ?? [
-    targetLang,
-    targetLang.split('-')[0],
-    'en-IN',
-    'en',
-  ];
-
-  console.log(
-    `[TTS] Language: ${targetLang} | Available voices: ${
-      voices.map(v => `${v.name} (${v.lang})`).join(', ') || 'none'
-    }`,
-  );
-
-  for (const code of chain) {
-    // 1. Exact lang match
-    let voice = voices.find(v => v.lang === code);
-    // 2. Prefix match (e.g. 'te' matches 'te-IN', 'te-XX')
-    if (!voice) {
-      const prefix = code.split('-')[0].toLowerCase();
-      voice = voices.find(v => v.lang.toLowerCase().startsWith(prefix + '-') || v.lang.toLowerCase() === prefix);
-    }
-    // 3. Name contains language word (e.g. voice.name includes "Telugu")
-    if (!voice) {
-      const nameHint = code.split('-')[0];
-      const langNames: Record<string, string> = { te: 'Telugu', or: 'Odia', hi: 'Hindi', en: 'English' };
-      const hint = langNames[nameHint];
-      if (hint) voice = voices.find(v => v.name.includes(hint));
-    }
-
-    if (voice) {
-      const isFallback = code !== targetLang;
-      console.log(
-        `[TTS] ${isFallback ? '⚠ FALLBACK' : '✓ Matched'} voice: "${voice.name}" (${voice.lang})`,
-      );
-      return { voice, isFallback };
-    }
-  }
-
-  // Last resort: any voice rather than silence
-  const voice = voices[0] ?? null;
-  console.log(`[TTS] ✗ No chain match — using first available: "${voice?.name ?? 'none'}" (${voice?.lang ?? 'n/a'})`);
-  return { voice, isFallback: true };
-}
-
 // ── Text-to-speech hook ───────────────────────────────────────────────────
-// Uses browser SpeechSynthesis API with voice fallback for Telugu/Odia.
-// `speaking`    – key of the currently playing utterance (or null)
-// `fallbackLang` – non-null when a fallback voice was used on the last play
+// Uses the AI /parent/speak endpoint (Google Cloud TTS) instead of browser
+// SpeechSynthesis. Preserves the same external interface as the old hook so
+// all call sites (notices, remarks, communication) require no changes.
+//
+// `speaking`    – key of the item currently loading or playing (or null)
+// `fallbackLang` – always null; AI TTS has no fallback concept
 // Toggle behaviour: clicking speak on the same key stops playback.
-// Stops any previous utterance before starting a new one.
+// Race-condition safe: a ref tracks the expected key so stale API responses
+// from a superseded call are discarded.
 
 export function useTTS() {
-  const [speaking,    setSpeaking]    = useState<string | null>(null);
-  const [fallbackLang, setFallbackLang] = useState<string | null>(null);
-  const speakingRef = useRef<string | null>(null);
+  const [speaking, setSpeaking] = useState<string | null>(null);
+  const audioRef  = useRef<HTMLAudioElement | null>(null);
+  const urlRef    = useRef<string | null>(null);
+  const keyRef    = useRef<string | null>(null);
 
-  const speak = useCallback((text: string, lang: string, key: string) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  const cleanup = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current = null;
+    }
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+    }
+  }, []);
 
-    window.speechSynthesis.cancel();
+  const stop = useCallback(() => {
+    keyRef.current = null;
+    cleanup();
+    setSpeaking(null);
+  }, [cleanup]);
 
-    // Toggle off if already speaking this item
-    if (speakingRef.current === key) {
-      speakingRef.current = null;
-      setSpeaking(null);
-      setFallbackLang(null);
+  useEffect(() => () => { cleanup(); }, [cleanup]);
+
+const speak = useCallback(
+  async (
+    text: string,
+    lang: string,
+    key: string
+  ) => {
+    if (keyRef.current === key) {
+      stop();
       return;
     }
 
-    const targetLang = SPEECH_LANG_MAP[lang] ?? 'en-IN';
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.lang = targetLang;
-    utt.rate = 0.9;
+    cleanup();
 
-    const doSpeak = () => {
-      const voices = window.speechSynthesis.getVoices();
-      const { voice, isFallback } = pickVoice(voices, targetLang);
+    keyRef.current = key;
+    setSpeaking(key);
+let result;
 
-      if (voice) utt.voice = voice;
+try {
+  result = await speakWithAI({
+    text,
+    targetLang: lang,
+  });
+} catch {
+  keyRef.current = null;
+  setSpeaking(null);
+  cleanup();
+  return;
+}
 
-      utt.onend   = () => { speakingRef.current = null; setSpeaking(null); setFallbackLang(null); };
-      utt.onerror = (ev) => {
-        // 'interrupted' is expected when cancel() is called before starting a new utterance
-        if (ev.error === 'interrupted') return;
-        console.warn('[TTS] SpeechSynthesis error:', ev.error);
-        speakingRef.current = null;
+    if (keyRef.current !== key) return;
+
+    if (!result.success || !result.data) {
+      keyRef.current = null;
+      setSpeaking(null);
+      return;
+    }
+
+    try {
+      console.log("Audio Blob:", result.data);
+console.log("Blob type:", result.data.type);
+console.log("Blob size:", result.data.size);
+
+const url = URL.createObjectURL(result.data);
+
+console.log("Audio URL:", url);
+
+urlRef.current = url;
+
+const audio = new Audio(url);
+
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        keyRef.current = null;
         setSpeaking(null);
-        setFallbackLang(null);
+        cleanup();
       };
 
-      window.speechSynthesis.speak(utt);
-      speakingRef.current = key;
-      setSpeaking(key);
-      setFallbackLang(isFallback ? targetLang : null);
-    };
+      audio.onerror = () => {
+        keyRef.current = null;
+        setSpeaking(null);
+        cleanup();
+      };
+      audio.onloadeddata = () => {
+  console.log("Audio loaded successfully");
+};
 
-    // Voices may not be loaded yet on the first call — wait for the event
-    if (window.speechSynthesis.getVoices().length === 0) {
-      window.speechSynthesis.onvoiceschanged = doSpeak;
-    } else {
-      doSpeak();
+audio.onplay = () => {
+  console.log("Audio started playing");
+};
+
+audio.onerror = (e) => {
+  console.log("Audio error", e);
+};
+
+try {
+  await audio.play();
+  console.log("Audio started successfully");
+} catch (error) {
+  console.log("Play error:", error);
+}
+    } catch {
+      keyRef.current = null;
+      setSpeaking(null);
+      cleanup();
     }
-  }, []); // speakingRef is stable; no stale closure risk
+  },
+  [cleanup, stop]
+);
 
-  const stop = useCallback(() => {
-    if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
-    speakingRef.current = null;
-    setSpeaking(null);
-    setFallbackLang(null);
-  }, []);
-
-  return { speaking, speak, stop, fallbackLang };
+  return { speaking, speak, stop, fallbackLang: null as string | null };
 }

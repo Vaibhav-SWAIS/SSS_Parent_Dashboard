@@ -37,14 +37,14 @@ const getInitials = (name: string) => {
 
 function getReadRemarkIds(studentId: number): Set<number> {
   try {
-    const raw = localStorage.getItem(`sgs_read_remarks_${studentId}`);
+    const raw = localStorage.getItem(`sss_read_remarks_${studentId}`);
     return raw ? new Set(JSON.parse(raw)) : new Set();
   } catch { return new Set(); }
 }
 
 function saveReadRemarkIds(studentId: number, ids: Set<number>) {
   try {
-    localStorage.setItem(`sgs_read_remarks_${studentId}`, JSON.stringify([...ids]));
+    localStorage.setItem(`sss_read_remarks_${studentId}`, JSON.stringify([...ids]));
   } catch { /* ignore */ }
 }
 
@@ -131,7 +131,7 @@ export default function RemarksHistory() {
         saveReadRemarkIds(studentId, ids);
         setReadIds(ids);
       } catch (err) {
-        console.error('[SGS] Remarks: failed to load', err);
+        console.error('[SSS] Remarks: failed to load', err);
       } finally {
         setIsLoading(false);
       }

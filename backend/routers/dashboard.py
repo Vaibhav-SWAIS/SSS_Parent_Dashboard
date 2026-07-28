@@ -28,7 +28,7 @@ from models import (
     # DISABLED: CallRequest   — call-request routes commented out below.
     # DISABLED: AttendanceMaster — attendance endpoints commented out below.
     # DISABLED: LeaveRequest     — leave-request endpoints commented out below.
-    # DISABLED: TeacherParentInteractionV2 — table absent on SGS RDS; remarks
+    # DISABLED: TeacherParentInteractionV2 — table absent on SSS RDS; remarks
     #           now come from TicketMessage (sender_type='TEACHER') instead.
     # NOTE: TeacherMaster removed — assigned_by / posted_by now FK to
     #       users_master.user_id; all teacher-name JOINs use UsersMaster.
@@ -280,7 +280,7 @@ def get_remarks_history(student_id: int, db: Session = Depends(get_db)):
         .filter(StudentSubmission.teacher_remarks != '').all()
 
     # Source 2: teacher replies in Communication Center tickets for this student.
-    # Replaces TeacherParentInteractionV2 (table absent on SGS RDS).
+    # Replaces TeacherParentInteractionV2 (table absent on SSS RDS).
     # sender_name is already stored on each TicketMessage; no extra join needed.
     teacher_msgs = db.query(TicketMessage, SupportTicket)\
         .join(SupportTicket, TicketMessage.ticket_id == SupportTicket.ticket_id)\

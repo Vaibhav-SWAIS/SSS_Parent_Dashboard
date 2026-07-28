@@ -1,9 +1,23 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+
+import { useTTS, translateCached } from '@/lib/multilingual';
+
 import TopBar from '@/components/TopBar';
-import { fetchAssignmentsHistory, fetchAssignmentAnalytics, submitAssignment } from '@/lib/api';
+
+import {
+  fetchAssignmentsHistory,
+  fetchAssignmentAnalytics,
+  submitAssignment
+} from '@/lib/api';
+
+import {
+  fetchDueDateAlert
+} from '@/lib/aiService';
+
 import { useDashboard } from '@/lib/DashboardContext';
+import AIInsightPanel from '@/components/AIInsightPanel';
 
 type Assignment = {
   assignment_id: number; assignment_title: string; assignment_text?: string | null;
@@ -45,6 +59,13 @@ const Badge = ({status}:{status:string}) => {
 export default function AssignmentsPage() {
   const { studentId, setStudentId, parentId, language, setLanguage } = useDashboard();
   const router = useRouter();
+  const { speak } = useTTS();
+  const [aiStatus, setAiStatus] = useState<
+  'idle' | 'loading' | 'success' | 'error'
+>('idle');
+
+const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+const [aiErrorType, setAiErrorType] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [analytics, setAnalytics] = useState<Analytics>({total:0,submitted:0,pending:0,overdue:0,graded:0,completion_pct:0});
   const [isLoading, setIsLoading] = useState(true);
@@ -58,9 +79,62 @@ export default function AssignmentsPage() {
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{m:string;ok:boolean}|null>(null);
+  const [aiAlert, setAiAlert] = useState<any>(null);
+  const [aiInsight, setAiInsight] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+
 
   const notify = (m:string,ok=true) => { setToast({m,ok}); setTimeout(()=>setToast(null),3000); };
+const generateAssignmentInsight = async () => {
+  try {
+    setAiStatus("loading");
+    setAiErrorType(null);
 
+    // Temporary frontend-generated insight.
+    // No AI analytics endpoint is called.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    const total = analytics.total;
+    const submitted = analytics.submitted + analytics.graded;
+    const pending = analytics.pending;
+    const overdue = analytics.overdue;
+    const completion = analytics.completion_pct;
+
+    let insight = "";
+
+    if (total === 0) {
+      insight =
+        "There are currently no assignments available for this student.";
+    } else if (overdue > 0) {
+      insight =
+        `The student has ${overdue} overdue assignment${
+          overdue > 1 ? "s" : ""
+        }. Please review the pending work and help the student complete it as soon as possible.`;
+    } else if (completion >= 80) {
+      insight =
+        `The student is performing well in assignment completion. ${submitted} out of ${total} assignments have been completed, with an overall completion rate of ${completion}%.`;
+    } else {
+      insight =
+        `The student has completed ${submitted} out of ${total} assignments. There are ${pending} pending assignment${
+          pending !== 1 ? "s" : ""
+        }. Regular follow-up can help improve assignment completion.`;
+    }
+
+    // Translate into the language selected in the TopBar
+    const translatedInsight = await translateCached(
+      insight,
+      language
+    );
+
+    setAiAnalysis(translatedInsight);
+    setAiStatus("success");
+  } catch (error) {
+    console.error("Assignment insight error:", error);
+
+    setAiStatus("error");
+    setAiErrorType("ai-unavailable");
+  }
+};
   const load = async () => {
     if (!studentId) return; // wait for real studentId
     setIsLoading(true);
@@ -94,6 +168,43 @@ export default function AssignmentsPage() {
     } catch { notify('Submission failed.',false); }
     finally { setSubmitting(false); }
   };
+  const handleDueDateAlert = async (assignment: Assignment) => {
+  try {
+
+    const response = await fetchDueDateAlert({
+      student_name: "Rahul",
+      assignment_title: assignment.assignment_title,
+      subject: assignment.subject,
+      due_date: assignment.due_date,
+      description: assignment.assignment_text || ""
+    });
+
+    console.log("AI Due Date Alert:", response);
+const translatedMessage = await translateCached(
+  response.alert_data.notification_message,
+  language
+);
+
+const translatedAction = await translateCached(
+  response.alert_data.suggested_parent_action,
+  language
+);
+
+setAiAlert({
+  ...response.alert_data,
+  notification_message: translatedMessage,
+  suggested_parent_action: translatedAction
+});
+
+await speak(
+  translatedMessage,
+  language,
+  `due-alert-${assignment.assignment_id}`
+);
+  } catch(error) {
+    console.error("Due Date Alert Error:", error);
+  }
+};
 
   const openModal = (a?:Assignment) => { setTarget(a||null); setText(''); setModal(true); };
 
@@ -129,6 +240,50 @@ export default function AssignmentsPage() {
             <div className="flex justify-center items-center h-60"><div className="animate-spin rounded-full h-10 w-10 border-b-2" style={{borderColor:'#EA580C'}}></div></div>
           ):(
             <>
+         {/* Overall AI Assignment Insight */}
+<div
+  className="bg-white rounded-2xl border shadow-sm overflow-hidden"
+  style={{ borderColor: "#FED7AA" }}
+>
+  <div
+    className="px-5 py-4 flex items-center gap-3"
+    style={{ background: "#FFF7ED" }}
+  >
+    <div
+      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
+      style={{ background: "#FFEDD5" }}
+    >
+      ✨
+    </div>
+
+    <div>
+      <h2
+        className="text-base font-black"
+        style={{ color: "#111827" }}
+      >
+        Overall Assignment AI Insight
+      </h2>
+
+      <p
+        className="text-xs mt-0.5"
+        style={{ color: "#9A3412" }}
+      >
+        Summary based on assignment progress
+      </p>
+    </div>
+  </div>
+
+  <div className="px-5 py-2">
+    <AIInsightPanel
+      status={aiStatus}
+      analysis={aiAnalysis}
+      errorType={aiErrorType}
+      onGenerate={generateAssignmentInsight}
+      buttonLabel="Generate Overall Assignment Insight"
+      insightLabel="Overall Assignment AI Insight"
+    />
+  </div>
+</div>
               {/* Metric Cards */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 {cards.map(c=>(
@@ -267,106 +422,308 @@ export default function AssignmentsPage() {
               </div>
             </div>
 
-            {/* ── SCROLLABLE BODY ── */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="p-6 space-y-5">
+          {/* ── SCROLLABLE BODY ── */}
+<div className="flex-1 overflow-y-auto">
+  <div className="p-6 space-y-5">
 
-                {/* SECTION 1 — Description */}
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{color:'#9CA3AF'}}>Description</p>
-                  <div className="rounded-xl p-4" style={{background:'#F9FAFB',border:'1px solid #E5E7EB'}}>
-                    <p className="text-sm leading-relaxed" style={{color:drawer.assignment_text?'#374151':'#9CA3AF',fontStyle:drawer.assignment_text?'normal':'italic'}}>
-                      {drawer.assignment_text||'No description provided.'}
-                    </p>
-                  </div>
-                </div>
+    {/* SECTION 1 — Description */}
+    <div>
+      <p
+        className="text-xs font-bold uppercase tracking-wider mb-2"
+        style={{ color: "#9CA3AF" }}
+      >
+        Description
+      </p>
 
-                {/* SECTION 2 — Info Grid (2 cols × 3 rows) */}
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{color:'#9CA3AF'}}>Assignment Information</p>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {[
-                      {icon:'👤',l:'Teacher',         v:drawer.teacher_name||'–'},
-                      {icon:'📅',l:'Due Date',         v:fmt(drawer.due_date)},
-                      {icon:'📤',l:'Submitted On',     v:drawer.submitted_at?fmt(drawer.submitted_at):'Not submitted'},
-                      {icon:'🎯',l:'Marks Obtained',   v:drawer.marks_obtained!=null?`${drawer.marks_obtained}`:'–'},
-                      {icon:'📊',l:'Total Marks',      v:drawer.total_marks!=null?`${drawer.total_marks}`:'–'},
-                      {icon:'📋',l:'Chapter',          v:drawer.chapter_name||'–'},
-                    ].map(({icon,l,v})=>(
-                      <div key={l} className="rounded-xl p-3.5" style={{background:'#fff',border:'1px solid #E5E7EB'}}>
-                        <p className="text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1" style={{color:'#9CA3AF'}}><span>{icon}</span>{l}</p>
-                        <p className="text-sm font-bold" style={{color:'#111827'}}>{v}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+      <div
+        className="rounded-xl p-4"
+        style={{
+          background: "#F9FAFB",
+          border: "1px solid #E5E7EB",
+        }}
+      >
+        <p
+          className="text-sm leading-relaxed"
+          style={{
+            color: drawer.assignment_text ? "#374151" : "#9CA3AF",
+            fontStyle: drawer.assignment_text ? "normal" : "italic",
+          }}
+        >
+          {drawer.assignment_text || "No description provided."}
+        </p>
+      </div>
+    </div>
 
-                {/* SECTION 3 — Status Insight */}
-                {(()=>{
-                  const dt=daysTag(drawer.due_date,drawer.status);
-                  type C={bg:string;bd:string;tx:string;icon:string;msg:string};
-                  let c:C|null=null;
-                  if(drawer.status==='Overdue')   c={bg:'#FEF2F2',bd:'#FECACA',tx:'#DC2626',icon:'⚠️',msg:dt?`Assignment overdue by ${dt.t.replace('d overdue','days')}.`:'Assignment is overdue.'};
-                  else if(drawer.status==='Ongoing')   c={bg:'#EFF6FF',bd:'#BFDBFE',tx:'#1D4ED8',icon:'⏰',msg:dt?`Due in ${dt.t}.`:'Assignment is currently active.'};
-                  else if(drawer.status==='Upcoming')  c={bg:'#F3E8FF',bd:'#D8B4FE',tx:'#7E22CE',icon:'📌',msg:dt?`Upcoming — ${dt.t}.`:'Assignment is upcoming.'};
-                  else if(drawer.status==='Submitted') c={bg:'#EFF6FF',bd:'#BFDBFE',tx:'#1D4ED8',icon:'📩',msg:'Submission sent. Waiting for teacher evaluation.'};
-                  else if(drawer.status==='Graded')    c={bg:'#F0FDF4',bd:'#BBF7D0',tx:'#15803D',icon:'✅',msg:'Assignment evaluated successfully.'};
-                  return c?(
-                    <div className="rounded-xl p-4 flex items-center gap-3" style={{background:c.bg,border:`1px solid ${c.bd}`}}>
-                      <span className="text-xl shrink-0">{c.icon}</span>
-                      <p className="text-sm font-semibold" style={{color:c.tx}}>{c.msg}</p>
-                    </div>
-                  ):null;
-                })()}
+    {/* SECTION 2 — Assignment Information */}
+    <div>
+      <p
+        className="text-xs font-bold uppercase tracking-wider mb-2.5"
+        style={{ color: "#9CA3AF" }}
+      >
+        Assignment Information
+      </p>
 
-                {/* SECTION 4 — Teacher Remarks */}
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{color:'#9CA3AF'}}>Teacher Remarks</p>
-                  {drawer.teacher_remarks?(
-                    <div className="rounded-xl p-4" style={{background:'#EFF6FF',border:'1px solid #BFDBFE'}}>
-                      <p className="text-[10px] font-bold uppercase mb-1.5 flex items-center gap-1.5" style={{color:'#1D4ED8'}}>
-                        <span>💬</span>Feedback from {drawer.teacher_name||'Teacher'}
-                      </p>
-                      <p className="text-sm leading-relaxed" style={{color:'#1E40AF'}}>"{drawer.teacher_remarks}"</p>
-                    </div>
-                  ):(
-                    <p className="text-sm italic py-1" style={{color:'#9CA3AF'}}>No remarks added yet.</p>
-                  )}
-                </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {[
+          {
+            icon: "👤",
+            l: "Teacher",
+            v: drawer.teacher_name || "–",
+          },
+          {
+            icon: "📅",
+            l: "Due Date",
+            v: fmt(drawer.due_date),
+          },
+          {
+            icon: "📤",
+            l: "Submitted On",
+            v: drawer.submitted_at
+              ? fmt(drawer.submitted_at)
+              : "Not submitted",
+          },
+          {
+            icon: "🎯",
+            l: "Marks Obtained",
+            v:
+              drawer.marks_obtained != null
+                ? `${drawer.marks_obtained}`
+                : "–",
+          },
+          {
+            icon: "📊",
+            l: "Total Marks",
+            v:
+              drawer.total_marks != null
+                ? `${drawer.total_marks}`
+                : "–",
+          },
+          {
+            icon: "📋",
+            l: "Chapter",
+            v: drawer.chapter_name || "–",
+          },
+        ].map(({ icon, l, v }) => (
+          <div
+            key={l}
+            className="rounded-xl p-3.5"
+            style={{
+              background: "#fff",
+              border: "1px solid #E5E7EB",
+            }}
+          >
+            <p
+              className="text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1"
+              style={{ color: "#9CA3AF" }}
+            >
+              <span>{icon}</span>
+              {l}
+            </p>
 
-                {/* SECTION 5 — Student Submission */}
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{color:'#9CA3AF'}}>Student Submission</p>
-                  {drawer.submission_text?(
-                    <div className="space-y-2.5">
-                      <div className="rounded-xl p-4" style={{background:'#F0FDF4',border:'1px solid #BBF7D0'}}>
-                        <p className="text-[10px] font-bold uppercase mb-2 flex items-center gap-1.5" style={{color:'#15803D'}}><span>📝</span>Submitted Answer</p>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{color:'#166534'}}>{drawer.submission_text}</p>
-                        {drawer.submitted_at&&(
-                          <p className="text-[11px] mt-2 pt-2 border-t" style={{color:'#86EFAC',borderColor:'#BBF7D0'}}>Submitted on {fmt(drawer.submitted_at)}</p>
-                        )}
-                      </div>
-                      {drawer.file_path&&(
-                        <div className="rounded-xl p-3 flex items-center gap-3" style={{background:'#F9FAFB',border:'1px solid #E5E7EB'}}>
-                          <div className="w-9 h-9 rounded-lg flex items-center justify-center text-lg shrink-0" style={{background:'#F3F4F6'}}>📎</div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold" style={{color:'#374151'}}>Attachment</p>
-                            <p className="text-xs truncate" style={{color:'#6B7280'}}>{drawer.file_path}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ):(
-                    <div className="rounded-xl p-5 text-center" style={{background:'#F9FAFB',border:'1px dashed #E5E7EB'}}>
-                      <p className="text-2xl mb-1">📭</p>
-                      <p className="text-sm font-semibold" style={{color:'#6B7280'}}>No submission uploaded yet.</p>
-                      <p className="text-xs mt-0.5" style={{color:'#9CA3AF'}}>Click the button below to submit.</p>
-                    </div>
-                  )}
-                </div>
+            <p
+              className="text-sm font-bold"
+              style={{ color: "#111827" }}
+            >
+              {v}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
 
-              </div>
-            </div>
+    {/* SECTION 3 — Status */}
+    {(() => {
+      const dt = daysTag(drawer.due_date, drawer.status);
+
+      type C = {
+        bg: string;
+        bd: string;
+        tx: string;
+        icon: string;
+        msg: string;
+      };
+
+      let c: C | null = null;
+
+      if (drawer.status === "Overdue")
+        c = {
+          bg: "#FEF2F2",
+          bd: "#FECACA",
+          tx: "#DC2626",
+          icon: "⚠️",
+          msg: dt
+            ? `Assignment overdue by ${dt.t.replace(
+                "d overdue",
+                " days"
+              )}.`
+            : "Assignment is overdue.",
+        };
+      else if (drawer.status === "Ongoing")
+        c = {
+          bg: "#EFF6FF",
+          bd: "#BFDBFE",
+          tx: "#1D4ED8",
+          icon: "⏰",
+          msg: dt ? `Due in ${dt.t}.` : "Assignment is active.",
+        };
+      else if (drawer.status === "Upcoming")
+        c = {
+          bg: "#F3E8FF",
+          bd: "#D8B4FE",
+          tx: "#7E22CE",
+          icon: "📌",
+          msg: dt ? `Upcoming — ${dt.t}.` : "Assignment is upcoming.",
+        };
+      else if (drawer.status === "Submitted")
+        c = {
+          bg: "#EFF6FF",
+          bd: "#BFDBFE",
+          tx: "#1D4ED8",
+          icon: "📩",
+          msg: "Submission sent. Waiting for evaluation.",
+        };
+      else if (drawer.status === "Graded")
+        c = {
+          bg: "#F0FDF4",
+          bd: "#BBF7D0",
+          tx: "#15803D",
+          icon: "✅",
+          msg: "Assignment evaluated successfully.",
+        };
+
+      return c ? (
+        <div
+          className="rounded-xl p-4 flex items-center gap-3"
+          style={{
+            background: c.bg,
+            border: `1px solid ${c.bd}`,
+          }}
+        >
+          <span className="text-xl">{c.icon}</span>
+
+          <p
+            className="text-sm font-semibold"
+            style={{ color: c.tx }}
+          >
+            {c.msg}
+          </p>
+        </div>
+      ) : null;
+    })()}
+
+    {/* AI Reminder Card */}
+    {aiAlert && (
+      <div
+        className="rounded-xl p-4"
+        style={{
+          background: "#F0FDF4",
+          border: "1px solid #BBF7D0",
+        }}
+      >
+        <p className="font-bold text-sm mb-2">
+          🤖 {aiAlert.alert_title}
+        </p>
+
+        <p className="text-sm leading-relaxed">
+          {aiAlert.notification_message}
+        </p>
+
+        <p className="text-xs mt-3">
+          <b>Parent Action:</b>{" "}
+          {aiAlert.suggested_parent_action}
+        </p>
+      </div>
+    )}
+
+    {/* SECTION 4 — Teacher Remarks */}
+    <div>
+      <p
+        className="text-xs font-bold uppercase tracking-wider mb-2"
+        style={{ color: "#9CA3AF" }}
+      >
+        Teacher Remarks
+      </p>
+
+      {drawer.teacher_remarks ? (
+        <div
+          className="rounded-xl p-4"
+          style={{
+            background: "#EFF6FF",
+            border: "1px solid #BFDBFE",
+          }}
+        >
+          <p
+            className="text-[10px] font-bold uppercase mb-1.5"
+            style={{ color: "#1D4ED8" }}
+          >
+            💬 Feedback from {drawer.teacher_name || "Teacher"}
+          </p>
+
+          <p
+            className="text-sm"
+            style={{ color: "#1E40AF" }}
+          >
+            "{drawer.teacher_remarks}"
+          </p>
+        </div>
+      ) : (
+        <p
+          className="text-sm italic"
+          style={{ color: "#9CA3AF" }}
+        >
+          No remarks added yet.
+        </p>
+      )}
+    </div>
+
+
+    {/* SECTION 5 — Student Submission */}
+    <div>
+      <p
+        className="text-xs font-bold uppercase tracking-wider mb-2"
+        style={{ color: "#9CA3AF" }}
+      >
+        Student Submission
+      </p>
+
+      {drawer.submission_text ? (
+        <div
+          className="rounded-xl p-4"
+          style={{
+            background: "#F0FDF4",
+            border: "1px solid #BBF7D0",
+          }}
+        >
+          <p
+            className="text-sm whitespace-pre-wrap"
+            style={{ color: "#166534" }}
+          >
+            {drawer.submission_text}
+          </p>
+        </div>
+      ) : (
+        <div
+          className="rounded-xl p-5 text-center"
+          style={{
+            background: "#F9FAFB",
+            border: "1px dashed #E5E7EB",
+          }}
+        >
+          <p className="text-2xl">📭</p>
+
+          <p
+            className="text-sm font-semibold"
+            style={{ color: "#6B7280" }}
+          >
+            No submission uploaded yet.
+          </p>
+        </div>
+      )}
+    </div>
+
+  </div>
+</div>
+H
 
             {/* ── STICKY FOOTER ── */}
             <div className="shrink-0 px-6 py-4 border-t flex flex-wrap gap-3" style={{borderColor:'#E5E7EB',background:'#FAFAFA'}}>
@@ -383,6 +740,17 @@ export default function AssignmentsPage() {
                   <p className="text-sm font-bold" style={{color:'#15803D'}}>✅ Graded — {drawer.marks_obtained} marks received</p>
                 </div>
               ):null}
+              <button
+  onClick={()=>handleDueDateAlert(drawer)}
+  className="px-4 py-2.5 rounded-xl font-semibold text-sm border transition-colors hover:border-orange-400 hover:text-orange-600 flex items-center gap-1.5"
+  style={{
+    color:'#EA580C',
+    borderColor:'#FED7AA',
+    background:'#FFF7ED'
+  }}
+>
+🤖 AI Reminder
+</button>
               <button
                 onClick={()=>{
                   const subject = encodeURIComponent(`Re: ${drawer.assignment_title} (${drawer.subject})`);
@@ -473,5 +841,26 @@ export default function AssignmentsPage() {
         </div>
       )}
     </div>
-  );
+            );{aiAlert && (
+<div
+ className="rounded-xl p-4"
+ style={{
+  background:'#F0FDF4',
+  border:'1px solid #BBF7D0'
+ }}
+>
+<p className="font-bold text-sm mb-2">
+🤖 {aiAlert.alert_title}
+</p>
+
+<p className="text-sm">
+{aiAlert.notification_message}
+</p>
+
+<p className="text-xs mt-3">
+<b>Parent Action:</b> {aiAlert.suggested_parent_action}
+</p>
+
+</div>
+)}
 }

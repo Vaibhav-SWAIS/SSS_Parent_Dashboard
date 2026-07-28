@@ -3,9 +3,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import TopBar from '@/components/TopBar';
+import AIInsightPanel from '@/components/AIInsightPanel';
 import { fetchDashboardData } from '@/lib/api';
 import { useDashboard } from '@/lib/DashboardContext';
-import { useTranslation } from '@/lib/multilingual';
+import {
+  useTranslation,
+  useTranslatedText,
+  translateCached,
+} from '@/lib/multilingual';
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -29,7 +35,7 @@ function StatCard({
   icon: string; label: string; value: string | number;
   sub?: string; href?: string; iconBg: string;
 }) {
-  const card = (
+   const card = (
     <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 transition-all ${href ? 'hover:border-orange-200 hover:shadow-md cursor-pointer' : ''}`}>
       <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${iconBg}`}>{icon}</div>
       <div className="flex-1 min-w-0">
@@ -49,11 +55,11 @@ function SectionCard({ title, children, action }: {
   action?: { label: string; href: string };
 }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col">
+    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 flex flex-col">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-gray-900 text-sm">{title}</h3>
+        <h3 className="font-bold text-black text-sm">{title}</h3>
         {action && (
-          <Link href={action.href} className="text-[11px] text-orange-500 font-bold hover:underline shrink-0">
+          <Link href={action.href} className="text-[11px] text-orange-400 font-bold hover:underline shrink-0">
             {action.label}
           </Link>
         )}
@@ -67,7 +73,7 @@ function EmptyState({ icon, text }: { icon: string; text: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-8 text-center">
       <span className="text-3xl mb-2">{icon}</span>
-      <p className="text-sm text-gray-400">{text}</p>
+      <p className="text-sm text-slate-400">{text}</p>
     </div>
   );
 }
@@ -115,12 +121,94 @@ export default function ParentDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error,     setError]     = useState<string | null>(null);
 
+  const [aiStatus, setAiStatus] = useState<
+  'idle' | 'loading' | 'success' | 'error'
+>('idle');
+
+const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+
+const [aiErrorType, setAiErrorType] = useState<string | null>(null);
+
+const generateParentInsight = async () => {
+  try {
+    setAiStatus('loading');
+    setAiErrorType(null);
+
+    // Use the dashboard data already fetched by fetchDashboardData().
+    if (!data) {
+      throw new Error('Dashboard data is not available.');
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 700));
+
+    const averageScore = Number(
+      data?.performance_summary?.avg_score ??
+      displayAvg ??
+      0
+    );
+
+    const strongestSubject =
+      data?.performance_summary?.strongest_subject ??
+      'the strongest subject';
+
+    const weakestSubject =
+      data?.performance_summary?.weakest_subject ??
+      'areas that need additional support';
+
+    const assignmentCompletion = Number(
+      data?.assignment_completion_pct ?? 0
+    );
+
+    let insight = '';
+
+    if (averageScore === 0 && assignmentCompletion === 0) {
+      insight =
+        'There is currently no academic performance data available for your child. Please check again after assessment results have been added.';
+    } else if (averageScore >= 75) {
+      insight =
+        `Your child is showing strong academic progress, maintaining an overall average of ${averageScore.toFixed(2)} percent across recent assessments.\n\n` +
+        `• Their strongest subject is ${strongestSubject}, showing good understanding and consistent performance.\n\n` +
+        `• Their assignment completion is ${assignmentCompletion.toFixed(0)} percent, reflecting good responsibility and regular participation.\n\n` +
+        `• Continue encouraging regular revision and short practice activities to maintain this positive progress.`;
+    } else if (averageScore >= 50) {
+      insight =
+        `Your child is showing encouraging academic progress, maintaining an overall average of ${averageScore.toFixed(2)} percent across recent assessments.\n\n` +
+        `• Their strongest area is ${strongestSubject}, showing good potential and understanding of the subject.\n\n` +
+        `• ${weakestSubject} may need some additional support and regular practice.\n\n` +
+        `• You can help at home by doing short practice quizzes and encouraging regular revision to improve confidence and overall performance.`;
+    } else {
+      insight =
+        `Your child may benefit from some additional academic support, based on the current overall average of ${averageScore.toFixed(2)} percent.\n\n` +
+        `• Their strongest area is ${strongestSubject}, which can be used to build confidence and motivation.\n\n` +
+        `• Additional attention may be helpful in ${weakestSubject}.\n\n` +
+        `• Short daily study sessions, regular revision, and communication with teachers can help create a steady improvement plan.`;
+    }
+
+    // Translate the generated AI insight into the language
+    // selected in the TopBar.
+    const translatedInsight = await translateCached(
+      insight,
+      language
+    );
+
+    setAiAnalysis(translatedInsight);
+    setAiStatus('success');
+  } catch (error) {
+    console.error(
+      '[SSS] AI Parent Insight error:',
+      error
+    );
+
+    setAiStatus('error');
+    setAiErrorType('ai-unavailable');
+  }
+};
   useEffect(() => {
     if (!studentId) return; // wait for real studentId from localStorage / ChildSelector
     const load = async () => {
       setIsLoading(true); setError(null); setData(null);
       try {
-        console.log('[SSS] Dashboard: fetching for student_id', studentId);
+        console.log('[SGS] Dashboard: fetching for student_id', studentId);
         setData(await fetchDashboardData(studentId));
       }
       catch { setError('Failed to load dashboard. Please try again.'); }
@@ -170,7 +258,10 @@ export default function ParentDashboard() {
   const { displayed: dispRecMsgs,      translating: translatingRecs      } = useTranslation(recMsgTexts,    language);
   const { displayed: dispRecActions }                                        = useTranslation(recActionTexts, language);
 
-  const translating = translatingAlerts || translatingDeadlines || translatingRecs;
+ const translating =
+  translatingAlerts ||
+  translatingDeadlines ||
+  translatingRecs;
 
   // Learning Progress: combine assignment completion (60%) + quiz avg (40%)
   const assignmentCompletion = data?.assignment_completion_pct ?? null;
@@ -192,7 +283,7 @@ export default function ParentDashboard() {
   const actionRequiredCount = data?.action_required_count ?? (alerts.filter((a: any) => a.priority === 'HIGH').length);
 
   return (
-    <div className="min-h-full flex flex-col bg-[#F9FAFB] text-gray-800 font-sans">
+    <div className="min-h-full flex flex-col text-slate-200 font-sans">
       <TopBar
         studentId={studentId} setStudentId={setStudentId}
         parentId={parentId}
@@ -208,10 +299,10 @@ export default function ParentDashboard() {
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500" />
             </div>
           ) : error ? (
-            <div className="bg-red-50 text-red-600 p-6 rounded-xl text-center border border-red-100">{error}</div>
+            <div className="bg-red-500/10 text-red-400 p-6 rounded-xl text-center border border-red-500/20">{error}</div>
           ) : (
             <>
-              {/* ── Greeting ── */}
+               {/* ── Greeting ── */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-orange-200 flex items-center justify-center text-orange-700 font-black text-base border-2 border-orange-100 shrink-0">
                   PS
@@ -268,7 +359,7 @@ export default function ParentDashboard() {
                 />
               </div>
 
-              {/* ── Row 2: Action Required + Upcoming Deadlines ── */}
+               {/* ── Row 2: Action Required + Upcoming Deadlines ── */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                 <SectionCard
@@ -338,8 +429,7 @@ export default function ParentDashboard() {
                   )}
                 </SectionCard>
               </div>
-
-              {/* ── Row 3: Performance Summary + Smart Recommendations ── */}
+ {/* ── Row 3: Performance Summary + Smart Recommendations ── */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                 <SectionCard
@@ -416,7 +506,19 @@ export default function ParentDashboard() {
                 </SectionCard>
               </div>
 
-              {/* ── Row 4: Recent Activity ── */}
+              {/* ── Row 3b: AI Parent Insight ── */}
+             <SectionCard title="✨ AI Parent Insight">
+  <AIInsightPanel
+    status={aiStatus}
+    analysis={aiAnalysis}
+    errorType={aiErrorType}
+    onGenerate={generateParentInsight}
+    buttonLabel="Generate AI Parent Insight"
+    insightLabel="AI Parent Insight"
+  />
+</SectionCard>
+
+                {/* ── Row 4: Recent Activity ── */}
               <SectionCard
                 title="🔔 Recent Activity"
                 action={{ label: 'View Notices →', href: '/parent/notices' }}

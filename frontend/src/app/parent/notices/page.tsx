@@ -22,14 +22,14 @@ type NoticeData = {
 
 function getReadNoticeIds(studentId: number): Set<number> {
   try {
-    const raw = localStorage.getItem(`sgs_read_notices_${studentId}`);
+    const raw = localStorage.getItem(`sss_read_notices_${studentId}`);
     return raw ? new Set(JSON.parse(raw)) : new Set();
   } catch { return new Set(); }
 }
 
 function saveReadNoticeIds(studentId: number, ids: Set<number>) {
   try {
-    localStorage.setItem(`sgs_read_notices_${studentId}`, JSON.stringify([...ids]));
+    localStorage.setItem(`sss_read_notices_${studentId}`, JSON.stringify([...ids]));
   } catch { /* ignore */ }
 }
 
@@ -117,7 +117,7 @@ export default function NoticesHistory() {
         // Do NOT auto-mark all as read here — that was the bug.
         // Read state is loaded from localStorage in the effect above.
       } catch (err) {
-        console.error('[SGS] Notices: failed to load', err);
+        console.error('[SSS] Notices: failed to load', err);
       } finally {
         setIsLoading(false);
       }
@@ -158,7 +158,7 @@ export default function NoticesHistory() {
       const next = new Set(prev);
       next.add(targetId);
       saveReadNoticeIds(studentId, next);
-      window.dispatchEvent(new CustomEvent('sgsNoticeRead', { detail: { noticeId: targetId, sid: studentId } }));
+      window.dispatchEvent(new CustomEvent('sssNoticeRead', { detail: { noticeId: targetId, sid: studentId } }));
       return next;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -172,7 +172,7 @@ export default function NoticesHistory() {
     next.add(noticeId);
     setReadIds(next);
     saveReadNoticeIds(studentId, next);
-    window.dispatchEvent(new CustomEvent('sgsNoticeRead', { detail: { noticeId, sid: studentId } }));
+    window.dispatchEvent(new CustomEvent('sssNoticeRead', { detail: { noticeId, sid: studentId } }));
   };
 
   const handleTalkToTeacher = (notice: NoticeData) => {
