@@ -179,24 +179,35 @@ export const voiceToText = async (
   file: File,
   language: string
 ) => {
-  const formData = new FormData();
+  try {
+    const formData = new FormData();
 
-  formData.append("file", file);
-  formData.append("language", language);
+    formData.append("file", file);
+    formData.append("language", language);
 
-  const response = await axios.post(
-    `${AI_BASE_URL}/voice-to-text`,
-    formData,
-    {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    }
-  );
+    const response = await axios.post(
+      `${AI_BASE_URL}/voice-to-text`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
 
-  return response.data;
+    console.log("Voice To Text:", response.data);
+
+    return response.data;
+  } catch (err: any) {
+    console.error("Voice To Text Error");
+
+    console.log("Status:", err.response?.status);
+    console.log("Data:", err.response?.data);
+    console.log("Message:", err.message);
+
+    throw err;
+  }
 };
-
 // ----------------------------
 // Due Date Alert
 // ----------------------------
