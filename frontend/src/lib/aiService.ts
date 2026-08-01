@@ -1,6 +1,8 @@
 import axios from "axios";
 
 const AI_BASE_URL = "http://18.61.240.248:7007/api/parent";
+const DEFAULT_EMAIL = "parent_user@sss.edu"; // Replace with dynamic logged-in user email when ready
+const DEFAULT_CLIENT = "SSS";
 
 export const aiApi = axios.create({
   baseURL: AI_BASE_URL,
@@ -31,19 +33,16 @@ export const translateText = async (
   text: string,
   targetLanguage: string
 ) => {
-  // Do not call the API for empty text
   if (!text?.trim()) {
     return {
       translated_text: "",
     };
   }
 
-  // Convert language code to language name if required
   const normalizedLanguage =
     LANGUAGE_MAP[targetLanguage.toLowerCase()] ??
     targetLanguage;
 
-  // English does not need translation
   if (
     normalizedLanguage.toLowerCase() === "english" ||
     targetLanguage.toLowerCase() === "en"
@@ -54,17 +53,12 @@ export const translateText = async (
   }
 
   try {
-    console.log("Translation request:", {
-      text,
-      target_language: normalizedLanguage,
-    });
-
     const response = await aiApi.post("/translate", {
       text: text.trim(),
       target_language: normalizedLanguage,
+      user_email: DEFAULT_EMAIL,
+      client_name: DEFAULT_CLIENT,
     });
-
-    console.log("Translation response:", response.data);
 
     return response.data;
   } catch (error: any) {
@@ -72,8 +66,6 @@ export const translateText = async (
       "Translation API failed:",
       error?.response?.data ?? error?.message
     );
-
-    // Keep the original text instead of breaking the dashboard
     return {
       translated_text: text,
       error: true,
@@ -93,10 +85,11 @@ export const fetchAssessmentSummary = async (payload: {
   teacher_remarks?: string;
   language?: string;
 }) => {
-  const response = await aiApi.post(
-    "/assessment-summary",
-    payload
-  );
+  const response = await aiApi.post("/assessment-summary", {
+    ...payload,
+    user_email: DEFAULT_EMAIL,
+    client_name: DEFAULT_CLIENT,
+  });
 
   return response.data;
 };
@@ -108,18 +101,14 @@ export const textToVoice = async (
   text: string,
   language: string
 ) => {
-  const response = await aiApi.post(
-    "/text-to-voice",
-    {
-      text,
-      language,
-    }
-  );
-
-  console.log("TTS API RESPONSE:", response.data);
+  const response = await aiApi.post("/text-to-voice", {
+    text,
+    language,
+    user_email: DEFAULT_EMAIL,
+    client_name: DEFAULT_CLIENT,
+  });
 
   const base64 = response.data.audio_base64;
-
   const byteCharacters = atob(base64);
   const byteNumbers = new Array(byteCharacters.length);
 
@@ -128,13 +117,7 @@ export const textToVoice = async (
   }
 
   const byteArray = new Uint8Array(byteNumbers);
-
-  const blob = new Blob(
-    [byteArray],
-    { type: "audio/mpeg" }
-  );
-
-  console.log("FINAL AUDIO BLOB:", blob);
+  const blob = new Blob([byteArray], { type: "audio/mpeg" });
 
   return blob;
 };
@@ -150,28 +133,20 @@ export const speakWithAI = async ({
   targetLang: string;
 }) => {
   try {
-    const audio = await textToVoice(
-      text,
-      targetLang
-    );
-
-    console.log("Generated audio blob:", audio);
-    console.log("Blob type:", audio.type);
-    console.log("Blob size:", audio.size);
-
+    const audio = await textToVoice(text, targetLang);
     return {
       success: true,
       data: audio,
     };
   } catch (err) {
     console.error(err);
-
     return {
       success: false,
       data: null,
     };
   }
 };
+
 // ----------------------------
 // Voice To Text
 // ----------------------------
@@ -181,9 +156,10 @@ export const voiceToText = async (
 ) => {
   try {
     const formData = new FormData();
-
     formData.append("file", file);
     formData.append("language", language);
+    formData.append("user_email", DEFAULT_EMAIL);
+    formData.append("client_name", DEFAULT_CLIENT);
 
     const response = await axios.post(
       `${AI_BASE_URL}/voice-to-text`,
@@ -195,22 +171,17 @@ export const voiceToText = async (
       }
     );
 
-    console.log("Voice To Text:", response.data);
-
     return response.data;
   } catch (err: any) {
-    console.error("Voice To Text Error");
-
-    console.log("Status:", err.response?.status);
-    console.log("Data:", err.response?.data);
-    console.log("Message:", err.message);
-
+    console.error("Voice To Text Error:", err.message);
     throw err;
   }
 };
+
 // ----------------------------
 // Due Date Alert
 // ----------------------------
+
 export interface DueDateAlertRequest {
   student_name: string;
   assignment_title: string;
@@ -219,55 +190,49 @@ export interface DueDateAlertRequest {
   description: string;
 }
 
+export interface DueDateAlertResponse {
+  status: string;
+  alert_title: string;
+  notification_message: string;
+  suggested_parent_action: string;
+}
+
+export interface DueDateAlertResponse {
+  status: string;
+  alert_title: string;
+  notification_message: string;
+  suggested_parent_action: string;
+}
+
 export const fetchDueDateAlert = async (
   payload: DueDateAlertRequest
-) => {
-  const response = await aiApi.post(
-    "/due-date-alert",
-    payload
-  );
+): Promise<DueDateAlertResponse> => {
+  try {
+    console.log("Request payload:", payload);
 
-  return response.data;
+    const response = await aiApi.post("/due-date-alert", {
+      ...payload,
+      user_email: DEFAULT_EMAIL,
+      client_name: DEFAULT_CLIENT,
+    });
+
+    console.log("Status:", response.status);
+    console.log("Response data:", response.data);
+
+    return response.data as DueDateAlertResponse;
+  } catch (error: any) {
+    console.error("Status:", error?.response?.status);
+    console.error("Error response:", error?.response?.data);
+    console.error("Error message:", error.message);
+
+    return {
+      status: "error",
+      alert_title: "",
+      notification_message: "",
+      suggested_parent_action: "",
+    };
+  }
 };
-// ----------------------------
-// Audio Translator
-// ----------------------------
-export const audioTranslator = async (
-  file: File,
-  sourceLanguage: string,
-  targetLanguage: string
-) => {
-  const formData = new FormData();
-
-  formData.append("file", file);
-  formData.append(
-    "source_language",
-    sourceLanguage
-  );
-  formData.append(
-    "target_language",
-    targetLanguage
-  );
-
-  const response = await axios.post(
-    `${AI_BASE_URL}/audio-translator`,
-    formData,
-    {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    }
-  );
-
-  return response.data;
-};
-
-// ----------------------------
-// Build User Info
-// ----------------------------
-export const buildUserInfo = (parentId: number) => ({
-  parentId,
-});
 
 // ----------------------------
 // AI Analytics
@@ -280,10 +245,11 @@ export const fetchAIAnalytics = async (payload: {
   };
 }) => {
   try {
-    const response = await aiApi.post(
-      "/analytics",
-      payload
-    );
+    const response = await aiApi.post("/analytics", {
+      ...payload,
+      user_email: DEFAULT_EMAIL,
+      client_name: DEFAULT_CLIENT,
+    });
 
     return {
       success: true,
@@ -294,7 +260,6 @@ export const fetchAIAnalytics = async (payload: {
     };
   } catch (error: any) {
     console.error("AI Analytics Error:", error);
-
     return {
       success: false,
       error:
