@@ -270,3 +270,11 @@ export const fetchAIAnalytics = async (payload: {
     };
   }
 };
+// ----------------------------
+// User Info Builder
+// ----------------------------
+export const buildUserInfo = (parentId: number) => {
+  return {
+    parentId,
+  };
+};
