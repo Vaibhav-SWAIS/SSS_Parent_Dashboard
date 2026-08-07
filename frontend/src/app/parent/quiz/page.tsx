@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import TopBar from '@/components/TopBar';
 import { fetchQuizHistory, fetchConversations } from '@/lib/api';
 import { useDashboard } from '@/lib/DashboardContext';
+import { useTranslation, translateCached } from '@/lib/multilingual';
 
 type QuizDetail = {
   quiz_id: number;
@@ -51,6 +52,68 @@ const CircularProgress = ({ pct, colorHex }: { pct: number; colorHex: string }) 
 
 export default function QuizPerformancePage() {
   const { studentId, setStudentId, parentId, language, setLanguage } = useDashboard();
+  const texts = useMemo(
+  () => [
+    'Quiz Performance',
+    'Overview of quiz results across all subjects.',
+    'Average Score',
+    'Highest Score',
+    'Lowest Score',
+    'Quizzes Attempted',
+    'Overall performance',
+    'Top result',
+    'Needs focus',
+    'Total count',
+    'Search quizzes...',
+    'All Subjects',
+    'No quizzes found.',
+    'Try adjusting your search or filters.',
+    'Quiz Information',
+    'Teacher',
+    'Subject',
+    'Teacher Insights',
+    'Status Feedback',
+    'Specific Remarks',
+    'Marks',
+    'out of',
+    'Conducted on',
+    'Close',
+    'Talk to Teacher',
+    'Opening…',
+  ],
+  []
+);
+
+const { displayed } = useTranslation(texts, language);
+
+const [
+  title,
+  subtitle,
+  averageText,
+  highestText,
+  lowestText,
+  attemptedText,
+  overallPerformanceText,
+  topResultText,
+  needsFocusText,
+  totalCountText,
+  searchText,
+  allSubjectsText,
+  noQuizzesText,
+  tryAgainText,
+  quizInformationText,
+  teacherText,
+  subjectText,
+  teacherInsightsText,
+  statusFeedbackText,
+  specificRemarksText,
+  marksText,
+  outOfText,
+  conductedOnText,
+  closeText,
+  talkToTeacherText,
+  openingText,
+] = displayed;
   const router = useRouter();
   const [quizzes, setQuizzes] = useState<QuizDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,6 +123,66 @@ export default function QuizPerformancePage() {
   const [subj, setSubj] = useState('All');
   const [modalData, setModalData] = useState<QuizDetail | null>(null);
   const [talkLoading, setTalkLoading] = useState(false);
+  const [translatedSuggestion, setTranslatedSuggestion] = useState('');
+const [translatedRemarks, setTranslatedRemarks] = useState('');
+const [translatedTeacher, setTranslatedTeacher] = useState('');
+const [translatedSubject, setTranslatedSubject] = useState('');
+const [translatedQuizTitle, setTranslatedQuizTitle] = useState('');
+
+useEffect(() => {
+  if (!modalData) {
+    setTranslatedSuggestion('');
+    setTranslatedRemarks('');
+    setTranslatedTeacher('');
+    setTranslatedSubject('');
+    setTranslatedQuizTitle('');
+    return;
+  }
+
+  let cancelled = false;
+
+  const translateModalData = async () => {
+    try {
+      const [
+        suggestion,
+        remarks,
+        teacher,
+        subject,
+        quizTitle,
+      ] = await Promise.all([
+        translateCached(modalData.suggestion || '', language),
+        translateCached(modalData.remarks || '', language),
+        translateCached(modalData.teacher_name || '', language),
+        translateCached(modalData.subject || '', language),
+        translateCached(modalData.quiz_title || '', language),
+      ]);
+
+      if (cancelled) return;
+
+      setTranslatedSuggestion(suggestion);
+      setTranslatedRemarks(remarks);
+      setTranslatedTeacher(teacher);
+      setTranslatedSubject(subject);
+      setTranslatedQuizTitle(quizTitle);
+    } catch (error) {
+      console.error('Failed to translate quiz details:', error);
+
+      if (cancelled) return;
+
+      setTranslatedSuggestion(modalData.suggestion || '');
+      setTranslatedRemarks(modalData.remarks || '');
+      setTranslatedTeacher(modalData.teacher_name || '');
+      setTranslatedSubject(modalData.subject || '');
+      setTranslatedQuizTitle(modalData.quiz_title || '');
+    }
+  };
+
+  translateModalData();
+
+  return () => {
+    cancelled = true;
+  };
+}, [modalData, language]);
 
   useEffect(() => {
     if (!studentId) return; // wait for real studentId
@@ -139,8 +262,12 @@ export default function QuizPerformancePage() {
           {/* ── HEADER ── */}
           <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4">
             <div>
-               <h1 className="text-3xl font-black text-white leading-tight">Quiz Performance</h1>
-              <p className="text-sm font-medium text-slate-400 mt-1">Overview of quiz results across all subjects.</p>
+               <h1 className="text-3xl font-black text-white leading-tight">
+  {title}
+</h1>
+              <p className="text-sm font-medium text-slate-400 mt-1">
+  {subtitle}
+</p>
             </div>
           
           </div>
@@ -154,11 +281,11 @@ export default function QuizPerformancePage() {
               {/* ── SUMMARY CARDS ── */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { l: 'Average Score', v: `${avgScore.toFixed(1)}%`, s: 'Overall performance' },
-                  { l: 'Highest Score', v: `${highest}%`, s: 'Top result' },
-                  { l: 'Lowest Score', v: `${lowest}%`, s: 'Needs focus' },
-                  { l: 'Quizzes Attempted', v: quizzes.length.toString(), s: 'Total count' },
-                ].map(c => (
+{ l: averageText, v: `${avgScore.toFixed(1)}%`, s: overallPerformanceText },
+{ l: highestText, v: `${highest}%`, s: topResultText },
+{ l: lowestText, v: `${lowest}%`, s: needsFocusText },
+{ l: attemptedText, v: quizzes.length.toString(), s: totalCountText },
+].map(c => (
                   <div key={c.l} className="bg-white/5 rounded-2xl border border-white/10 p-5">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{c.l}</p>
                     <p className="text-3xl font-black text-white">{c.v}</p>
@@ -169,14 +296,25 @@ export default function QuizPerformancePage() {
 
               {/* ── FILTER BAR ── */}
               <div className="bg-white/5 rounded-xl border border-white/10 p-3 flex flex-wrap items-center gap-3">
-                <select value={subj} onChange={e => setSubj(e.target.value)}
-                  className="bg-white/10 border border-white/20 text-white text-sm font-semibold rounded-lg px-3 py-2 outline-none min-w-[140px]">
-                  {subjects.map(s => <option key={s} value={s}>{s === 'All' ? 'All Subjects' : s}</option>)}
-                </select>
+                <select
+  value={subj}
+  onChange={e => setSubj(e.target.value)}
+  className="bg-slate-800 border border-white/20 text-white text-sm font-semibold rounded-lg px-3 py-2 outline-none min-w-[140px]"
+>
+  {subjects.map(s => (
+    <option
+      key={s}
+      value={s}
+      className="bg-slate-800 text-white"
+    >
+      {s === 'All' ? allSubjectsText : s}
+    </option>
+  ))}
+</select>
                 <div className="flex-1 relative min-w-[200px]">
                  <span className="absolute left-3 top-2.5 text-sm text-slate-400">🔍</span>
                   <input value={search} onChange={e => setSearch(e.target.value)}
-                    placeholder="Search quizzes..."
+                    placeholder={searchText}
                     className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm font-medium text-white outline-none placeholder:text-slate-500" />
                 </div>
               </div>
@@ -207,8 +345,12 @@ export default function QuizPerformancePage() {
               {filtered.length === 0 ? (
                 <div className="py-20 text-center bg-white/5 rounded-2xl border border-white/10 border-dashed">
                   <p className="text-4xl mb-3">📭</p>
-                  <p className="text-white font-bold">No quizzes found.</p>
-                  <p className="text-slate-400 text-sm mt-1">Try adjusting your search or filters.</p>
+                  <p className="text-white font-bold">
+  {noQuizzesText}
+</p>
+                 <p className="text-slate-400 text-sm mt-1">
+  {tryAgainText}
+</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -257,8 +399,10 @@ export default function QuizPerformancePage() {
               </div>
 
               <div className="px-6 py-4 border-b border-white/10">
-                <h2 className="text-2xl font-black text-white leading-tight">{modalData.quiz_title}</h2>
-                <p className="text-sm font-bold text-slate-400 mt-1">{modalData.subject} • Conducted on {fmt(modalData.quiz_date)}</p>
+                <h2 className="text-2xl font-black text-white leading-tight">{translatedQuizTitle}</h2>
+                <p className="text-sm font-bold text-slate-400 mt-1">
+  {modalData.subject} • {conductedOnText} {fmt(modalData.quiz_date)}
+</p>
               </div>
 
               <div className="p-6 space-y-6 overflow-y-auto max-h-[60vh]">
@@ -268,36 +412,41 @@ export default function QuizPerformancePage() {
                   <CircularProgress pct={modalData.percentage} colorHex={c.hex} />
                   <div>
                     <p className="text-xs font-black uppercase tracking-wider" style={{ color: c.hex }}>{modalData.status}</p>
-                    <p className="text-sm font-bold mt-1" style={{ color: c.text }}>Marks: {modalData.score} out of {modalData.total}</p>
+                    <p
+  className="text-sm font-bold mt-1"
+  style={{ color: c.text }}
+>
+  {marksText}: {modalData.score} {outOfText} {modalData.total}
+</p>  
                   </div>
                 </div>
 
                 {/* Details Grid */}
                 <div>
-                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3">Quiz Information</p>
+                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3">{quizInformationText}</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Teacher</p>
-                      <p className="text-sm font-bold text-white">{modalData.teacher_name}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{teacherText}</p>
+                      <p className="text-sm font-bold text-white">{translatedTeacher}</p>
                     </div>
                     <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Subject</p>
-                      <p className="text-sm font-bold text-white">{modalData.subject}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{subjectText}</p>
+                      <p className="text-sm font-bold text-white">{translatedSubject}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Remarks & Suggestion */}
                 <div>
-                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3">Teacher Insights</p>
+                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3">{teacherInsightsText}</p>
                   <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3">
                     <div>
-                      <p className="text-xs font-bold text-slate-400 mb-1">Status Feedback</p>
-                      <p className="text-sm font-bold text-white">{modalData.suggestion}</p>
+                      <p className="text-xs font-bold text-slate-400 mb-1">{statusFeedbackText}</p>
+                      <p className="text-sm font-bold text-white">{translatedSuggestion}</p>
                     </div>
                     {modalData.remarks && modalData.remarks !== modalData.suggestion && (
                       <div className="pt-3 border-t border-white/10">
-                        <p className="text-xs font-bold text-slate-400 mb-1">Specific Remarks</p>
+                        <p className="text-xs font-bold text-slate-400 mb-1">{specificRemarksText}</p>
                         <p className="text-sm font-medium text-gray-700 italic">"{modalData.remarks}"</p>
                       </div>
                     )}

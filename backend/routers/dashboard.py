@@ -169,50 +169,156 @@ def get_assignment_analytics(student_id: int, db: Session = Depends(get_db)):
     return AssignmentAnalyticsResponse(total=total, submitted=submitted, pending=ongoing, overdue=overdue, graded=graded, completion_pct=completion_pct)
 
 @router.post("/assignments/submit", response_model=AssignmentSchema)
-def submit_assignment(request: AssignmentSubmitRequest, db: Session = Depends(get_db)):
-    existing = db.query(StudentSubmission).filter(
-        StudentSubmission.assignment_id == request.assignment_id,
-        StudentSubmission.student_id == request.student_id
-    ).first()
-    if existing:
-        existing.submission_text = request.submission_text
-        existing.file_path = request.file_path
-        existing.submitted_at = datetime.utcnow()
-        db.commit()
-        db.refresh(existing)
-        sub = existing
-    else:
-        sub = StudentSubmission(
-            assignment_id=request.assignment_id,
-            student_id=request.student_id,
-            submission_text=request.submission_text,
-            file_path=request.file_path,
-            submitted_at=datetime.utcnow()
-        )
-        db.add(sub)
-        db.commit()
-        db.refresh(sub)
-
-    assign_row = db.query(AssignmentMaster, SubjectMaster.subject_name, ChapterMaster.chapter_name, UsersMaster.full_name)\
-        .join(ChapterMaster, AssignmentMaster.chapter_id == ChapterMaster.chapter_id)\
-        .join(SubjectMaster, ChapterMaster.subject_id == SubjectMaster.subject_id)\
-        .outerjoin(UsersMaster, AssignmentMaster.assigned_by == UsersMaster.user_id)\
-        .filter(AssignmentMaster.assignment_id == request.assignment_id).first()
-
-    if not assign_row:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    assign, subject_name, chapter_name, teacher_name = assign_row
-    status = "Graded" if sub.marks_obtained is not None else "Submitted"
-    return AssignmentSchema(
-        assignment_id=assign.assignment_id, assignment_title=assign.assignment_title,
-        assignment_text=assign.assignment_text, subject=subject_name,
-        chapter_name=chapter_name, teacher_name=teacher_name or "",
-        due_date=assign.due_date.isoformat() if assign.due_date else "",
-        status=status, marks_obtained=sub.marks_obtained,
-        submitted_at=sub.submitted_at.isoformat() if sub.submitted_at else None,
-        submission_text=sub.submission_text, teacher_remarks=sub.teacher_remarks, file_path=sub.file_path
+def submit_assignment(
+    request: AssignmentSubmitRequest,
+    db: Session = Depends(get_db)
+):
+    logger.info(
+        "[assignments/submit] Request received: "
+        "assignment_id=%s, student_id=%s, submission_text=%s, file_path=%s",
+        request.assignment_id,
+        request.student_id,
+        request.submission_text,
+        request.file_path
     )
 
+    try:
+        # Check whether assignment exists
+
+        assign_row = (
+            db.query(
+                AssignmentMaster,
+                SubjectMaster.subject_name,
+                ChapterMaster.chapter_name,
+                UsersMaster.full_name
+            )
+            .join(
+                ChapterMaster,
+                AssignmentMaster.chapter_id == ChapterMaster.chapter_id
+            )
+            .join(
+                SubjectMaster,
+                ChapterMaster.subject_id == SubjectMaster.subject_id
+            )
+            .outerjoin(
+                UsersMaster,
+                AssignmentMaster.assigned_by == UsersMaster.user_id
+            )
+            .filter(
+                AssignmentMaster.assignment_id == request.assignment_id
+            )
+            .first()
+        )
+
+        if not assign_row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Assignment {request.assignment_id} not found"
+            )
+
+        assign, subject_name, chapter_name, teacher_name = assign_row
+
+        # Check whether student exists
+
+        student = db.query(StudentMaster).filter(
+            StudentMaster.student_id == request.student_id
+        ).first()
+
+        if not student:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Student {request.student_id} not found"
+            )
+
+        # Check for existing submission
+
+        existing = db.query(StudentSubmission).filter(
+            StudentSubmission.assignment_id == request.assignment_id,
+            StudentSubmission.student_id == request.student_id
+        ).first()
+
+        if existing:
+
+            logger.info(
+                "[assignments/submit] Updating existing submission_id=%s",
+                existing.submission_id
+            )
+
+            existing.submission_text = request.submission_text
+            existing.file_path = request.file_path
+            existing.submitted_at = datetime.utcnow()
+
+            db.commit()
+            db.refresh(existing)
+
+            sub = existing
+
+        else:
+
+            logger.info(
+                "[assignments/submit] Creating new submission"
+            )
+
+            sub = StudentSubmission(
+                assignment_id=request.assignment_id,
+                student_id=request.student_id,
+                submission_text=request.submission_text,
+                file_path=request.file_path,
+                submitted_at=datetime.utcnow()
+            )
+
+            db.add(sub)
+            db.commit()
+            db.refresh(sub)
+
+        status = (
+            "Graded"
+            if sub.marks_obtained is not None
+            else "Submitted"
+        )
+
+        response = AssignmentSchema(
+            assignment_id=assign.assignment_id,
+            assignment_title=assign.assignment_title,
+            assignment_text=assign.assignment_text,
+            subject=subject_name,
+            chapter_name=chapter_name,
+            teacher_name=teacher_name or "",
+            due_date=assign.due_date.isoformat()
+            if assign.due_date else "",
+            status=status,
+            marks_obtained=sub.marks_obtained,
+            submitted_at=sub.submitted_at.isoformat()
+            if sub.submitted_at else None,
+            submission_text=sub.submission_text,
+            teacher_remarks=sub.teacher_remarks,
+            file_path=sub.file_path
+        )
+
+        logger.info(
+            "[assignments/submit] Success: assignment_id=%s, student_id=%s",
+            request.assignment_id,
+            request.student_id
+        )
+
+        return response
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        db.rollback()
+
+        logger.exception(
+            "[assignments/submit] Internal error"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+    
 @router.get("/quiz/history/{student_id}", response_model=List[QuizDetailResponse])
 def get_quiz_history(student_id: int, db: Session = Depends(get_db)):
     student = db.query(StudentMaster).filter(StudentMaster.student_id == student_id).first()

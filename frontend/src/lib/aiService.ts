@@ -1,6 +1,10 @@
 import axios from "axios";
 
-const AI_BASE_URL = "http://18.61.240.248:7007/api/parent";
+// 🚀 FIX 3: Environment Variable Support
+// This prevents "Mixed Content" errors when deploying to Vercel/Netlify.
+// It falls back to your EC2 IP for local testing if the env var isn't set yet.
+const AI_BASE_URL = process.env.NEXT_PUBLIC_AI_BASE_URL || "http://18.61.240.248:7007/api/parent";
+
 const DEFAULT_EMAIL = "parent_user@sss.edu"; // Replace with dynamic logged-in user email when ready
 const DEFAULT_CLIENT = "SSS";
 
@@ -109,15 +113,11 @@ export const textToVoice = async (
   });
 
   const base64 = response.data.audio_base64;
-  const byteCharacters = atob(base64);
-  const byteNumbers = new Array(byteCharacters.length);
-
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-
-  const byteArray = new Uint8Array(byteNumbers);
-  const blob = new Blob([byteArray], { type: "audio/mpeg" });
+  
+  // 🚀 FIX 1: SUPER FAST NATIVE DECODING
+  // This replaces the old `for` loop, preventing the UI thread from freezing!
+  const fetchResponse = await fetch(`data:audio/mpeg;base64,${base64}`);
+  const blob = await fetchResponse.blob();
 
   return blob;
 };
@@ -197,13 +197,6 @@ export interface DueDateAlertResponse {
   suggested_parent_action: string;
 }
 
-export interface DueDateAlertResponse {
-  status: string;
-  alert_title: string;
-  notification_message: string;
-  suggested_parent_action: string;
-}
-
 export const fetchDueDateAlert = async (
   payload: DueDateAlertRequest
 ): Promise<DueDateAlertResponse> => {
@@ -270,6 +263,7 @@ export const fetchAIAnalytics = async (payload: {
     };
   }
 };
+
 // ----------------------------
 // User Info Builder
 // ----------------------------

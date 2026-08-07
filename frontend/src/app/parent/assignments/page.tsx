@@ -82,12 +82,53 @@ const [aiErrorType, setAiErrorType] = useState<string | null>(null);
   const [aiAlert, setAiAlert] = useState<any>(null);
   const [aiInsight, setAiInsight] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [attachment, setAttachment] = useState<File | null>(null);
+const [driveLink, setDriveLink] = useState("");
+const [attachmentError, setAttachmentError] = useState("");
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+const handleFileChange = (
+  e: React.ChangeEvent<HTMLInputElement>
+) => {
+  const file = e.target.files?.[0];
+
+  if (!file) return;
+
+  setAttachmentError("");
+
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    setAttachment(null);
+    setAttachmentError(
+      "Only PDF, DOC, DOCX, JPG and PNG files are allowed."
+    );
+    return;
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    setAttachment(null);
+    setAttachmentError(
+      "File size should not exceed 10 MB."
+    );
+    return;
+  }
+
+  setAttachment(file);
+  setDriveLink("");
+};
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
 
 
   const notify = (m:string,ok=true) => { setToast({m,ok}); setTimeout(()=>setToast(null),3000); };
 const generateAssignmentInsight = async () => {
   try {
-    setAiStatus("loading");
+    setAiStatus("loading"); 
     setAiErrorType(null);
 
     // Temporary frontend-generated insight.
@@ -136,12 +177,32 @@ const generateAssignmentInsight = async () => {
   }
 };
   const load = async () => {
-    if (!studentId) return; // wait for real studentId
-    setIsLoading(true);
-    console.log('[SSS] Assignments: fetching for student_id', studentId);
-    const [a,an] = await Promise.all([fetchAssignmentsHistory(studentId),fetchAssignmentAnalytics(studentId)]);
-    setAssignments(a); setAnalytics(an); setIsLoading(false);
-  };
+  if (!studentId) return;
+
+  setIsLoading(true);
+
+  try {
+    console.log(
+      "[SSS] Assignments: fetching for student_id",
+      studentId
+    );
+
+    const [a, an] = await Promise.all([
+      fetchAssignmentsHistory(studentId),
+      fetchAssignmentAnalytics(studentId),
+    ]);
+
+    console.log("Assignments from API:", a);
+    console.log("Analytics from API:", an);
+
+    setAssignments(a);
+    setAnalytics(an);
+  } catch (error) {
+    console.error("Load error:", error);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   useEffect(()=>{ load(); setDrawer(null); setTab('All'); },[studentId]);
 
@@ -156,54 +217,102 @@ const generateAssignmentInsight = async () => {
   }),[assignments,tab,subj,statusF,search]);
 
   const counts = useMemo(()=>TABS.reduce((acc,t)=>({...acc,[t]:t==='All'?assignments.length:assignments.filter(a=>a.status===t).length}),{} as Record<Tab,number>),[assignments]);
-
+const validateDriveLink = (url: string) => {
+  return /^https:\/\/(drive\.google\.com|docs\.google\.com)\//.test(url);
+};
   const doSubmit = async () => {
-    if(!text.trim()||!target) return;
-    setSubmitting(true);
-    try {
-      const up = await submitAssignment({assignment_id:target.assignment_id,student_id:studentId,submission_text:text});
-      setAssignments(p=>p.map(a=>a.assignment_id===up.assignment_id?up:a));
-      if(drawer?.assignment_id===up.assignment_id) setDrawer(up);
-      await load(); setModal(false); setText(''); notify('Submitted successfully!');
-    } catch { notify('Submission failed.',false); }
-    finally { setSubmitting(false); }
-  };
- const handleDueDateAlert = async (assignment: Assignment) => {
+  if (!text.trim() || !target) return;
+
+  console.log("Target assignment:", target);
+
+  if (!target.assignment_id) {
+    console.error("Invalid assignment ID:", target);
+
+    notify("Invalid assignment ID.", false);
+    return;
+  }
+
+  if (!studentId) {
+    notify("Student ID not found.", false);
+    return;
+  }
+
+  if (attachment && driveLink) {
+    notify(
+      "Please upload a file OR provide a Drive link, not both.",
+      false
+    );
+    return;
+  }
+
+  if (driveLink && !validateDriveLink(driveLink)) {
+    notify("Please enter a valid Google Drive link.", false);
+    return;
+  }
+
+  setSubmitting(true);
+
   try {
-    const response = await fetchDueDateAlert({
-      student_name: "Rahul",
-      assignment_title: assignment.assignment_title,
-      subject: assignment.subject,
-      due_date: assignment.due_date,
-      description: assignment.assignment_text || "",
-    });
+    const formData = new FormData();
 
-    console.log("Due Date Alert:", response);
+    console.log("assignment_id =", target.assignment_id);
+    console.log("student_id =", studentId);
 
-    const translatedMessage = await translateCached(
-      response.notification_message,
-      language
+    formData.append(
+      "assignment_id",
+      String(target.assignment_id)
     );
 
-    const translatedAction = await translateCached(
-      response.suggested_parent_action,
-      language
+    formData.append(
+      "student_id",
+      String(studentId)
     );
 
-    setAiAlert({
-      alert_title: response.alert_title,
-      notification_message: translatedMessage,
-      suggested_parent_action: translatedAction,
-      status: response.status,
-    });
-
-    await speak(
-      translatedMessage,
-      language,
-      `due-alert-${assignment.assignment_id}`
+    formData.append(
+      "submission_text",
+      text
     );
-  } catch (error) {
-    console.error("Due Date Alert Error:", error);
+
+    if (attachment) {
+      formData.append("file", attachment);
+    }
+
+    if (driveLink) {
+      formData.append("drive_link", driveLink);
+    }
+
+    const up = await submitAssignment(formData);
+
+    setAssignments(prev =>
+      prev.map(a =>
+        a.assignment_id === up.assignment_id ? up : a
+      )
+    );
+
+    if (drawer?.assignment_id === up.assignment_id) {
+      setDrawer(up);
+    }
+
+    await load();
+
+    setModal(false);
+    setText("");
+    setAttachment(null);
+    setDriveLink("");
+
+    notify("Submitted successfully!");
+  } catch (error: any) {
+    console.error(
+      "Submission failed:",
+      error.response?.data || error
+    );
+
+    notify(
+      error.response?.data?.detail || "Submission failed.",
+      false
+    );
+  } finally {
+    setSubmitting(false);
   }
 };
   const openModal = (a?:Assignment) => { setTarget(a||null); setText(''); setModal(true); };
@@ -215,6 +324,27 @@ const generateAssignmentInsight = async () => {
     {label:'Overdue',val:analytics.overdue,note:'Need attention',icon:'🚨',c:'#DC2626'},
     {label:'Graded',val:analytics.graded,note:'Marks received',icon:'🎯',c:'#D97706'},
   ];
+
+ const handleDueDateAlert = async (assignment: Assignment) => {
+  try {
+    setAiLoading(true);
+
+    const response = await fetchDueDateAlert({
+      student_name: "Student", // replace with actual student name if available
+      assignment_title: assignment.assignment_title,
+      subject: assignment.subject,
+      due_date: assignment.due_date,
+      description: assignment.assignment_text ?? "",
+    });
+
+    setAiAlert(response);
+  } catch (err) {
+    console.error(err);
+    notify("Unable to generate AI reminder.", false);
+  } finally {
+    setAiLoading(false);
+  }
+};
 
   return (
     <div className="min-h-full flex flex-col font-sans">
@@ -737,16 +867,46 @@ const generateAssignmentInsight = async () => {
               {!target?(
                 <div>
                   <label className="block text-xs font-bold mb-1.5 uppercase tracking-wide" style={{color:'#E2E8F0'}}>Select Assignment</label>
-                  <select onChange={e=>{const f=assignments.find(a=>a.assignment_id===Number(e.target.value));setTarget(f||null);}}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm font-medium outline-none"
-                      style={{color:'#F8FAFC',borderColor:'rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.05)'}}>
-                    <option value="" style={{color:'#64748B'}}>— Choose an assignment —</option>
-                    {assignments.filter(a=>['Upcoming','Ongoing','Overdue'].includes(a.status)).map(a=>(
-                      <option key={a.assignment_id} value={a.assignment_id} style={{color:'#F8FAFC'}}>
-                        {a.assignment_title} · {a.subject} · Due {fmt(a.due_date)}
-                      </option>
-                    ))}
-                  </select>
+<select
+  onChange={e=>{
+    const f = assignments.find(
+      a => a.assignment_id === Number(e.target.value)
+    );
+    setTarget(f || null);
+  }}
+  className="w-full border rounded-xl px-3 py-2.5 text-sm font-medium outline-none"
+  style={{
+    color:'#F8FAFC',
+    borderColor:'rgba(255,255,255,0.1)',
+    background:'#334155'
+  }}
+>
+  <option 
+    value="" 
+    style={{
+      background:'#334155',
+      color:'#F8FAFC'
+    }}
+  >
+    — Choose an assignment —
+  </option>
+
+  {assignments
+    .filter(a=>['Upcoming','Ongoing','Overdue'].includes(a.status))
+    .map(a=>(
+      <option
+        key={a.assignment_id}
+        value={a.assignment_id}
+        style={{
+          background:'#334155',
+          color:'#F8FAFC'
+        }}
+      >
+        {a.assignment_title} · {a.subject} · Due {fmt(a.due_date)}
+      </option>
+    ))
+  }
+</select>
                 </div>
               ):(
                  <div className="rounded-xl p-4" style={{background:'rgba(234,88,12,0.1)',border:'1px solid rgba(234,88,12,0.25)'}}>
@@ -774,14 +934,63 @@ const generateAssignmentInsight = async () => {
                   onBlur={e=>e.target.style.borderColor='rgba(255,255,255,0.1)'}/>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold mb-1.5 uppercase tracking-wide" style={{color:'#E2E8F0'}}>Attachment (optional)</label>
-                <div className="border-2 border-dashed rounded-xl p-4 text-center" style={{borderColor:'rgba(255,255,255,0.1)'}}>
-                  <p className="text-sm" style={{color:'#9CA3AF'}}>📎 Drag & drop or paste a file link</p>
-                  <input type="text" placeholder="https://drive.google.com/..." className="mt-2 w-full text-sm border rounded-lg px-3 py-2 outline-none"
-                    style={{color:'#F8FAFC',borderColor:'rgba(255,255,255,0.1)'}}/>
-                </div>
-              </div>
+            <div>
+  <label
+    className="block text-xs font-bold mb-2 uppercase tracking-wide"
+    style={{ color: "#E2E8F0" }}
+  >
+    Attachment (Optional)
+  </label>
+
+  <div
+    className="border-2 border-dashed rounded-xl p-4"
+    style={{ borderColor: "rgba(255,255,255,0.1)" }}
+  >
+    <input
+      type="file"
+      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+      onChange={handleFileChange}
+      className="block w-full text-sm text-slate-300"
+    />
+
+    <p
+      className="text-center text-xs my-3"
+      style={{ color: "#9CA3AF" }}
+    >
+      OR
+    </p>
+
+    <input
+      type="url"
+      placeholder="https://drive.google.com/..."
+      value={driveLink}
+      onChange={(e) => {
+        setDriveLink(e.target.value);
+        setAttachment(null);
+        setAttachmentError("");
+      }}
+      className="w-full text-sm border rounded-lg px-3 py-2 outline-none"
+      style={{
+        color: "#F8FAFC",
+        borderColor: "rgba(255,255,255,0.1)",
+        background: "#334155",
+      }}
+    />
+
+    <p
+      className="text-xs mt-2"
+      style={{ color: "#9CA3AF" }}
+    >
+      Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 10 MB)
+    </p>
+
+    {attachmentError && (
+      <p className="text-red-500 text-xs mt-2">
+        {attachmentError}
+      </p>
+    )}
+  </div>
+</div>
 
               <button onClick={doSubmit} disabled={!text.trim()||!target||submitting}
                 className="w-full py-3 rounded-xl font-bold text-sm text-white transition-opacity"
@@ -793,26 +1002,5 @@ const generateAssignmentInsight = async () => {
         </div>
       )}
     </div>
-            );{aiAlert && (
-<div
- className="rounded-xl p-4"
- style={{
-  background:'#F0FDF4',
-  border:'1px solid #BBF7D0'
- }}
->
-<p className="font-bold text-sm mb-2">
-🤖 {aiAlert.alert_title}
-</p>
-
-<p className="text-sm">
-{aiAlert.notification_message}
-</p>
-
-<p className="text-xs mt-3">
-<b>Parent Action:</b> {aiAlert.suggested_parent_action}
-</p>
-
-</div>
-)}
-}
+    );
+    }
