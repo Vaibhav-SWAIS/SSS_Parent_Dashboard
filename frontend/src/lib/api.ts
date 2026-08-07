@@ -32,8 +32,19 @@ export const fetchAssignmentAnalytics = async (studentId: number) => {
   } catch { return { total: 0, submitted: 0, pending: 0, overdue: 0, graded: 0, completion_pct: 0 }; }
 };
 
-export const submitAssignment = async (payload: { assignment_id: number; student_id: number; submission_text: string; file_path?: string }) => {
-  const response = await api.post('/assignments/submit', payload);
+export const submitAssignment = async (formData: FormData) => {
+  console.log("API URL:", api.defaults.baseURL);
+
+  console.log(
+    "Form data:",
+    Object.fromEntries(formData.entries())
+  );
+
+  const response = await api.post(
+    "/assignments/submit",
+    formData
+  );
+
   return response.data;
 };
 
@@ -183,12 +194,9 @@ export const fetchAssessmentAnalytics = async (studentId: number) => {
     };
   }
 };
-
 export const fetchNotifications = async (studentId: number) => {
-  try {
-    const response = await api.get(`/notifications/${studentId}`);
-    return response.data;
-  } catch { return []; }
+  const response = await api.get(`/notifications/${studentId}`);
+  return response.data;
 };
 
 export const fetchUnreadCommCount = async (studentId: number): Promise<number> => {

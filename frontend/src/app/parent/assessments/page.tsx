@@ -221,47 +221,59 @@ export default function AssessmentsPage() {
   const [customEnd,      setCustomEnd]      = useState('');
 
   const [modalData, setModalData] = useState<Assessment | null>(null);
- const [aiSummary, setAiSummary] = useState<any>(null);
+  const [aiSummary, setAiSummary] = useState<any>(null);
+  
+  // 🚀 AI CACHE FIX: Stores previously generated summaries to prevent redundant API calls
+  const [summaryCache, setSummaryCache] = useState<Record<number, any>>({});
+  
   const [loadingAI, setLoadingAI] = useState(false);
+  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
- useEffect(() => {
- if (!modalData) {
-  setAiSummary(null);
-  return;
-}
+  useEffect(() => {
+    if (!modalData) {
+      setAiSummary(null);
+      return;
+    }
 
-const loadSummary = async () => {
-  setLoadingAI(true);
+    // 🚀 CACHE FIX: Load from memory instantly if we already generated it!
+    if (summaryCache[modalData.result_id]) {
+      setAiSummary(summaryCache[modalData.result_id]);
+      return;
+    }
 
-  try {
-    const response = await fetchAssessmentSummary({
-      student_name: "Student",
-      subject: modalData.subject,
-      test_name: modalData.title,
-      marks_obtained: modalData.marks_obtained,
-      total_marks: modalData.max_marks,
-      teacher_remarks: "",
-    });
+    const loadSummary = async () => {
+      setLoadingAI(true);
 
-    console.log("Assessment Summary API Response:", response);
+      try {
+        const response = await fetchAssessmentSummary({
+          student_name: "Student", // You can dynamically pass the real student name here later
+          subject: modalData.subject,
+          test_name: modalData.title,
+          marks_obtained: modalData.marks_obtained,
+          total_marks: modalData.max_marks,
+          teacher_remarks: "", 
+        });
 
-    setAiSummary(
-      response.summary ??
-      response.ai_summary ??
-      response.result ??
-      response
-    );
+        console.log("Assessment Summary API Response:", response);
 
-  } catch (err) {
-    console.error(err);
-    setAiSummary(null);
-  } finally {
-    setLoadingAI(false);
-  }
-};
+        const fetchedSummary = response.summary ?? response.ai_summary ?? response.result ?? response;
+        
+        setAiSummary(fetchedSummary);
+        
+        // Save to cache so it is instant next time!
+        setSummaryCache(prev => ({ ...prev, [modalData.result_id]: fetchedSummary }));
 
-  loadSummary();
-}, [modalData]);
+      } catch (err) {
+        console.error(err);
+        setAiSummary(null);
+      } finally {
+        setLoadingAI(false);
+      }
+    };
+
+    loadSummary();
+  }, [modalData, summaryCache]);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -349,6 +361,15 @@ const loadSummary = async () => {
       lowest:  Math.min(...pcts),
     };
   }, [filtered]);
+
+  const stopAudio = () => {
+  if (audio) {
+    audio.pause();
+    audio.currentTime = 0;
+    setAudio(null);
+    setIsPlaying(false);
+  }
+};
 
   // ── Chart data ────────────────────────────────────────────────────────────
 
@@ -690,9 +711,12 @@ const loadSummary = async () => {
       {modalData && (() => {
         const c = statusColor(modalData.performance_badge);
         return (
-          <div
+        <div
             className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-            onClick={() => setModalData(null)}
+            onClick={() => {
+              stopAudio();
+              setModalData(null);
+            }}
           >
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-[100]" />
             <div
@@ -702,11 +726,14 @@ const loadSummary = async () => {
               {/* Modal header controls */}
               <div className="shrink-0 p-6 pb-0 flex justify-between items-start">
                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl bg-white/10">
-                  📝
+                 📝
                 </div>
                 <button
-                  onClick={() => setModalData(null)}
-                 className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-colors text-xl font-bold"
+                  onClick={() => {
+                    stopAudio();
+                    setModalData(null);
+                  }}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-colors text-xl font-bold"
                 >
                   ×
                 </button>
@@ -764,198 +791,193 @@ const loadSummary = async () => {
                     ))}
                   </div>
                 </div>
-{/* ── AI PERFORMANCE SUMMARY ─────────────────────────────── */}
-<div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
-  <div className="flex items-center justify-between gap-3 mb-3">
-    <div className="flex items-center gap-2">
-      <span className="text-lg">✨</span>
+                
+                {/* ── AI PERFORMANCE SUMMARY ─────────────────────────────── */}
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
 
-      <p className="text-sm font-black text-orange-700">
-        {t.aiPerformanceSummary}
-      </p>
-    </div>
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">✨</span>
+                      <p className="text-sm font-black text-orange-700">
+                        {t.aiPerformanceSummary}
+                      </p>
+                    </div>
 
-    {/* AI Actions */}
-    {aiSummary && (
-      <div className="flex items-center gap-2">
+                    {/* AI Actions */}
+                    {aiSummary && (
+                      <div className="flex items-center gap-2">
 
-        {/* Translate */}
-        <button
-          onClick={async () => {
-            try {
-              const summaryText = `
-${aiSummary.summary_title ?? ''}
+                        {/* Translate */}
+                        <button
+                          onClick={async () => {
+                            try {
+                              // 🚀 FIX: Concurrent translation for all fields instantly!
+                              const [perfRes, encRes, tipsRes] = await Promise.all([
+                                translateText(aiSummary.performance_breakdown || "", language),
+                                translateText(aiSummary.encouraging_feedback || "", language),
+                                translateText(
+                                  Array.isArray(aiSummary.home_support_tips) 
+                                    ? aiSummary.home_support_tips.join(" ") 
+                                    : (aiSummary.home_support_tips || ""), 
+                                  language
+                                )
+                              ]);
 
-Performance:
-${aiSummary.performance_breakdown ?? ''}
+                              const translatedSummary = {
+                                ...aiSummary,
+                                performance_breakdown: perfRes.translated_text,
+                                encouraging_feedback: encRes.translated_text,
+                                home_support_tips: tipsRes.translated_text,
+                              };
 
-Encouragement:
-${aiSummary.encouraging_feedback ?? ''}
+                              setAiSummary(translatedSummary);
+                              
+                              // Save the translated version back to the cache!
+                              if (modalData?.result_id) {
+                                setSummaryCache(prev => ({
+                                  ...prev,
+                                  [modalData.result_id]: translatedSummary
+                                }));
+                              }
 
-Home Support Tips:
-${aiSummary.home_support_tips ?? ''}
-              `.trim();
+                            } catch (error) {
+                              console.error(error);
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-200 bg-white text-orange-700 hover:bg-orange-100 transition-colors"
+                        >
+                          🌐 Translate
+                        </button>
 
-              const translated = await translateText(
-                summaryText,
-                language
-              );
+                        {/* Listen */}
+                        <button
+                          onClick={async () => {
+                            try {
+                              stopAudio();
 
-              const translatedText =
-                translated?.translated_text ??
-                translated?.text ??
-                translated?.translation ??
-                '';
+                              // 🚀 FIX: Pure string without English labels to prevent robotic TTS glitches
+                              const summaryText = `
+                                ${aiSummary.summary_title ?? ''}.
+                                ${aiSummary.performance_breakdown ?? ''}.
+                                ${aiSummary.encouraging_feedback ?? ''}.
+                                ${Array.isArray(aiSummary.home_support_tips) ? aiSummary.home_support_tips.join(". ") : (aiSummary.home_support_tips ?? '')}
+                              `.trim();
 
-              if (translatedText) {
-                setAiSummary({
-                  ...aiSummary,
-                  summary_title: translatedText,
-                  performance_breakdown: '',
-                  encouraging_feedback: '',
-                  home_support_tips: '',
-                });
-              }
-            } catch (error) {
-              console.error(
-                'Assessment summary translation failed:',
-                error
-              );
-            }
-          }}
-          className="px-3 py-1.5 rounded-lg text-xs font-bold border
-                     border-orange-200 bg-white text-orange-700
-                     hover:bg-orange-100 transition-colors"
-        >
-          🌐 Translate
-        </button>
+                              const audioResponse = await textToVoice(summaryText, language);
+                              
+                              // Create Object URL from the returned Blob
+                              const audioUrl = URL.createObjectURL(audioResponse);
+                              const newAudio = new Audio(audioUrl);
 
-        {/* Listen */}
-        <button
-          onClick={async () => {
-            try {
-              const summaryText = `
-${aiSummary.summary_title ?? ''}
+                              newAudio.onended = () => {
+                                URL.revokeObjectURL(audioUrl);
+                                setAudio(null);
+                                setIsPlaying(false);
+                              };
 
-Performance:
-${aiSummary.performance_breakdown ?? ''}
+                              setAudio(newAudio);
+                              setIsPlaying(true);
+                              await newAudio.play();
 
-Encouragement:
-${aiSummary.encouraging_feedback ?? ''}
+                            } catch (error) {
+                              console.error("Assessment summary voice generation failed:", error);
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-200 bg-white text-orange-700 hover:bg-orange-100 transition-colors"
+                        >
+                          🔊 Listen
+                        </button>
 
-Home Support Tips:
-${aiSummary.home_support_tips ?? ''}
-              `.trim();
+                        {/* Stop */}
+                        {isPlaying && (
+                          <button
+                            onClick={stopAudio}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold border border-red-200 bg-white text-red-700 hover:bg-red-100 transition-colors"
+                          >
+                            ⏹ Stop
+                          </button>
+                        )}
 
-              const audioResponse = await textToVoice(
-                summaryText,
-                language
-              );
+                      </div>
+                    )}
+                  </div>
 
-              // textToVoice returns a Blob
-              const audioUrl = URL.createObjectURL(audioResponse);
+                  {/* Loading */}
+                  {loadingAI ? (
+                    <div className="py-4">
+                      <p className="text-sm font-semibold text-gray-500">
+                        ✨ Generating AI summary...
+                      </p>
+                    </div>
+                  ) : aiSummary ? (
+                    <div className="space-y-4">
 
-              const audio = new Audio(audioUrl);
+                      {/* Summary Title */}
+                      {aiSummary.summary_title && (
+                        <div>
+                          <h4 className="font-black text-orange-700">
+                            {aiSummary.summary_title}
+                          </h4>
+                        </div>
+                      )}
 
-              audio.onended = () => {
-                URL.revokeObjectURL(audioUrl);
-              };
+                      {/* Performance */}
+                      {aiSummary.performance_breakdown && (
+                        <div>
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                            {t.performance}
+                          </p>
+                          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mt-1">
+                            {aiSummary.performance_breakdown}
+                          </p>
+                        </div>
+                      )}
 
-              await audio.play();
+                      {/* Encouragement */}
+                      {aiSummary.encouraging_feedback && (
+                        <div>
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                            {t.encouragement}
+                          </p>
+                          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mt-1">
+                            {aiSummary.encouraging_feedback}
+                          </p>
+                        </div>
+                      )}
 
-            } catch (error) {
-              console.error(
-                'Assessment summary voice generation failed:',
-                error
-              );
-            }
-          }}
-          className="px-3 py-1.5 rounded-lg text-xs font-bold border
-                     border-orange-200 bg-white text-orange-700
-                     hover:bg-orange-100 transition-colors"
-        >
-          🔊 Listen
-        </button>
+                      {/* Home Support */}
+                      {aiSummary.home_support_tips && (
+                        <div>
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                            {t.homeSupportTips}
+                          </p>
+                          
+                          {/* 🚀 FIX: Safely map arrays to a nice bulleted list to prevent React crashes */}
+                          <div className="text-sm text-gray-700 leading-relaxed mt-1">
+                            {Array.isArray(aiSummary.home_support_tips) ? (
+                              <ul className="list-disc pl-5 space-y-1">
+                                {aiSummary.home_support_tips.map((tip: string, idx: number) => (
+                                  <li key={idx}>{tip}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="whitespace-pre-wrap">{aiSummary.home_support_tips}</p>
+                            )}
+                          </div>
+                          
+                        </div>
+                      )}
 
-      </div>
-    )}
-  </div>
+                    </div>
+                  ) : (
+                    <div className="py-3">
+                      <p className="text-sm text-gray-500">
+                        {t.noAISummary}
+                      </p>
+                    </div>
+                  )}
 
-  {/* Loading */}
-  {loadingAI ? (
-    <div className="py-4">
-      <p className="text-sm font-semibold text-gray-500">
-        ✨ Generating AI summary...
-      </p>
-    </div>
-
-  ) : aiSummary ? (
-
-    /* AI Summary */
-    <div className="space-y-4">
-
-      {/* Summary Title */}
-      {aiSummary.summary_title && (
-        <div>
-          <h4 className="font-black text-orange-700">
-            {aiSummary.summary_title}
-          </h4>
-        </div>
-      )}
-
-      {/* Performance */}
-      {aiSummary.performance_breakdown && (
-        <div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-            {t.performance}
-          </p>
-
-          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-            {aiSummary.performance_breakdown}
-          </p>
-        </div>
-      )}
-
-      {/* Encouragement */}
-      {aiSummary.encouraging_feedback && (
-        <div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-            {t.encouragement}
-          </p>
-
-          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-            {aiSummary.encouraging_feedback}
-          </p>
-        </div>
-      )}
-
-      {/* Home Support */}
-      {aiSummary.home_support_tips && (
-        <div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-            {t.homeSupportTips}
-          </p>
-
-          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-            {aiSummary.home_support_tips}
-          </p>
-        </div>
-      )}
-
-    </div>
-
-  ) : (
-
-    /* Empty state */
-    <div className="py-3">
-      <p className="text-sm text-gray-500">
-        {t.noAISummary}
-      </p>
-    </div>
-
-  )}
-</div>
-
+                </div>
               </div>
             </div>
           </div>
