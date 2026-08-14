@@ -47,7 +47,7 @@ export const submitAssignment = async (formData: FormData) => {
 
   return response.data;
 };
-
+  
 export const fetchQuizHistory = async (studentId: number) => {
   try {
     const response = await api.get(`/quiz/history/${studentId}`);

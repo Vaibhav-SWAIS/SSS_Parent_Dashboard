@@ -468,14 +468,14 @@ const generateParentInsight = async () => {
                                   style={{ width: `${Math.min(100, Math.max(0, s.score))}%` }}
                                 />
                               </div>
-                              <span className="text-xs font-bold text-gray-600 w-9 text-right shrink-0">
+                              <span className="text-xs font-bold text-slate-300 w-9 text-right shrink-0">
                                 {Math.round(s.score)}%
                               </span>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-gray-400 text-center py-2">
+                        <p className="text-xs text-slate-400 text-center py-2">
                           Subject breakdown unavailable.
                         </p>
                       )}
@@ -489,13 +489,13 @@ const generateParentInsight = async () => {
                   ) : (
                     <div className="space-y-2">
                       {recs.slice(0, 4).map((r: any, i: number) => (
-                        <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                        <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
                           <span className="text-lg shrink-0 mt-0.5">{recIcon(r.type)}</span>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-800">
+                            <p className="text-sm font-semibold text-white">
                               {dispRecMsgs[i] ?? r.message}
                             </p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">
+                            <p className="text-[11px] text-slate-400 mt-0.5">
                               {dispRecActions[i] ?? r.action_text}
                             </p>
                           </div>
@@ -533,13 +533,13 @@ const generateParentInsight = async () => {
                         <Link
                           key={i}
                           href={n.link || '#'}
-                          className="flex flex-col items-center text-center gap-1.5 p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-orange-200 hover:bg-orange-50 transition-all"
+                           className="flex flex-col items-center text-center gap-1.5 p-3 rounded-xl bg-white/5 border border-white/10 hover:border-orange-500/40 hover:bg-orange-500/10 transition-all"
                         >
-                          <div className={`w-9 h-9 rounded-full ${ns.bg} flex items-center justify-center text-lg shrink-0`}>
+                          <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-lg shrink-0">
                             {ns.icon}
                           </div>
-                          <p className="text-[11px] text-gray-700 font-medium leading-tight line-clamp-2">{n.title}</p>
-                          <span className="text-[10px] text-gray-400">{fmtDate(n.date)}</span>
+                          <p className="text-[11px] text-slate-300 font-medium leading-tight line-clamp-2">{n.title}</p>
+                          <span className="text-[10px] text-slate-500">{fmtDate(n.date)}</span>
                         </Link>
                       );
                     })}

@@ -505,7 +505,7 @@ class Assessment(Base):
     assessment_id   = Column(BigInteger, primary_key=True, index=True)
     teacher_id      = Column(BigInteger, ForeignKey(f"{DB_PREFIX}teacher_master.teacher_id"), nullable=False)
     title           = Column(String(300))
-    assessment_type = Column(
+    assessment_type = Column(   
         PgEnum('quiz', 'test', 'exam', 'assignment', name='assessment_type', create_type=False),
         nullable=False,
         server_default='test',
