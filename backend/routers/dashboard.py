@@ -1,10 +1,36 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import uuid
+
+from pathlib import Path
+from datetime import datetime, date, timedelta
+from typing import List, Dict, Any
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    UploadFile,
+    File,
+    Form,
+)
+
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+
 from database import get_db
-from typing import List, Dict, Any
-from datetime import datetime, date, timedelta
+
+UPLOAD_ROOT = Path(
+    os.getenv(
+        "ASSIGNMENT_UPLOAD_ROOT",
+        "uploads"
+    )
+) / "assignments"
+
+UPLOAD_ROOT.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 logger = logging.getLogger(__name__)
 from services.dashboard_service import get_dashboard_data
@@ -97,53 +123,354 @@ def get_parent_children(parent_id: int, db: Session = Depends(get_db)):
     logger.info("[parents/children] parent_id=%s → %d children found", parent_id, len(result))
     return result
 
-@router.get("/assignments/history/{student_id}", response_model=List[AssignmentSchema])
-def get_assignments_history(student_id: int, db: Session = Depends(get_db)):
-    student = db.query(StudentMaster).filter(StudentMaster.student_id == student_id).first()
-    if not student:
-        logger.warning("[assignments/history] student_id=%s not found → returning []", student_id)
-        return []
+@router.get(
+    "/assignments/history/{student_id}",
+    response_model=List[AssignmentSchema]
+)
+def get_assignments_history(
+    student_id: int,
+    db: Session = Depends(get_db)
+):
+    logger.info(
+        "[assignments/history] Request received: student_id=%s",
+        student_id
+    )
 
-    assignments_query = db.query(
-        AssignmentMaster, SubjectMaster.subject_name, ChapterMaster.chapter_name,
-        UsersMaster.full_name, StudentSubmission
-    ).select_from(AssignmentMaster)\
-    .join(ChapterMaster, AssignmentMaster.chapter_id == ChapterMaster.chapter_id)\
-    .join(SubjectMaster, ChapterMaster.subject_id == SubjectMaster.subject_id)\
-    .outerjoin(UsersMaster, AssignmentMaster.assigned_by == UsersMaster.user_id)\
-    .outerjoin(StudentSubmission, (StudentSubmission.assignment_id == AssignmentMaster.assignment_id) & (StudentSubmission.student_id == student_id))\
-    .filter(SubjectMaster.class_id == student.class_id)\
-    .order_by(AssignmentMaster.due_date.desc()).all()
+    try:
 
-    assignment_list = []
-    today = date.today()
-    for assign, subject_name, chapter_name, teacher_name, submission in assignments_query:
-        if submission:
-            status = "Graded" if submission.marks_obtained is not None else "Submitted"
-        elif assign.due_date and assign.due_date < today:
-            status = "Overdue"
-        elif assign.due_date and (assign.due_date - today).days <= 7:
-            status = "Ongoing"
-        else:
-            status = "Upcoming"
-        assignment_list.append(AssignmentSchema(
-            assignment_id=assign.assignment_id,
-            assignment_title=assign.assignment_title,
-            assignment_text=assign.assignment_text,
-            subject=subject_name,
-            chapter_name=chapter_name,
-            teacher_name=teacher_name or "",
-            due_date=assign.due_date.isoformat() if assign.due_date else "",
-            status=status,
-            marks_obtained=submission.marks_obtained if submission else None,
-            submitted_at=submission.submitted_at.isoformat() if submission and submission.submitted_at else None,
-            submission_text=submission.submission_text if submission else None,
-            teacher_remarks=submission.teacher_remarks if submission else None,
-            file_path=submission.file_path if submission else None,
-        ))
-    logger.info("[assignments/history] student_id=%s → %d assignments", student_id, len(assignment_list))
-    return assignment_list
+        # =========================================================
+        # 1. CHECK STUDENT
+        # =========================================================
 
+        student = (
+            db.query(StudentMaster)
+            .filter(
+                StudentMaster.student_id == student_id
+            )
+            .first()
+        )
+
+        if not student:
+            logger.warning(
+                "[assignments/history] Student not found: %s",
+                student_id
+            )
+            return []
+
+        # =========================================================
+        # 2. GET ASSIGNMENTS + SUBMISSIONS
+        # =========================================================
+
+        assignments_query = (
+            db.query(
+                AssignmentMaster,
+                SubjectMaster.subject_name,
+                ChapterMaster.chapter_name,
+                UsersMaster.full_name,
+                StudentSubmission
+            )
+            .select_from(AssignmentMaster)
+
+            .join(
+                ChapterMaster,
+                AssignmentMaster.chapter_id ==
+                ChapterMaster.chapter_id
+            )
+
+            .join(
+                SubjectMaster,
+                ChapterMaster.subject_id ==
+                SubjectMaster.subject_id
+            )
+
+            .outerjoin(
+                UsersMaster,
+                AssignmentMaster.assigned_by ==
+                UsersMaster.user_id
+            )
+
+            .outerjoin(
+                StudentSubmission,
+                (
+                    StudentSubmission.assignment_id ==
+                    AssignmentMaster.assignment_id
+                )
+                &
+                (
+                    StudentSubmission.student_id ==
+                    student_id
+                )
+            )
+
+            .filter(
+                SubjectMaster.class_id ==
+                student.class_id
+            )
+
+            .order_by(
+                AssignmentMaster.due_date.desc()
+            )
+
+            .all()
+        )
+
+        # =========================================================
+        # 3. BUILD RESPONSE
+        # =========================================================
+
+        assignment_list = []
+
+        today = date.today()
+
+        for (
+            assign,
+            subject_name,
+            chapter_name,
+            teacher_name,
+            submission
+        ) in assignments_query:
+
+            # =====================================================
+            # STATUS
+            # =====================================================
+
+            if submission:
+
+                status = (
+                    "Graded"
+                    if submission.marks_obtained is not None
+                    else "Submitted"
+                )
+
+            elif (
+                assign.due_date
+                and assign.due_date < today
+            ):
+
+                status = "Overdue"
+
+            elif (
+                assign.due_date
+                and (assign.due_date - today).days <= 7
+            ):
+
+                status = "Ongoing"
+
+            else:
+
+                status = "Upcoming"
+
+            # =====================================================
+            # SUBMISSION FILE INFORMATION
+            # =====================================================
+
+            submission_file_path = (
+                submission.file_path
+                if submission
+                else None
+            )
+
+            file_url = None
+            file_name = None
+            drive_link = None
+
+            if submission_file_path:
+
+                # -------------------------------------------------
+                # Google Drive / Google Docs
+                # -------------------------------------------------
+
+                if (
+                    submission_file_path.startswith(
+                        "https://drive.google.com/"
+                    )
+                    or
+                    submission_file_path.startswith(
+                        "https://docs.google.com/"
+                    )
+                ):
+
+                    drive_link = submission_file_path
+
+                    logger.info(
+                        "[assignments/history] "
+                        "Drive link found: assignment_id=%s, "
+                        "student_id=%s",
+                        assign.assignment_id,
+                        student_id
+                    )
+
+                # -------------------------------------------------
+                # Uploaded PDF / Word / Image
+                # -------------------------------------------------
+
+                elif submission_file_path.startswith(
+                    "/uploads/"
+                ):
+
+                    file_url = submission_file_path
+
+                    file_name = Path(
+                        submission_file_path
+                    ).name
+
+                    logger.info(
+                        "[assignments/history] "
+                        "Uploaded file found: "
+                        "assignment_id=%s, "
+                        "student_id=%s, "
+                        "file_name=%s",
+                        assign.assignment_id,
+                        student_id,
+                        file_name
+                    )
+
+            # =====================================================
+            # RESPONSE
+            # =====================================================
+
+            assignment_data = AssignmentSchema(
+
+                assignment_id=
+                    assign.assignment_id,
+
+                assignment_title=
+                    assign.assignment_title,
+
+                assignment_text=
+                    assign.assignment_text,
+
+                subject=
+                    subject_name or "",
+
+                chapter_name=
+                    chapter_name or "",
+
+                teacher_name=
+                    teacher_name or "",
+
+                due_date=(
+                    assign.due_date.isoformat()
+                    if assign.due_date
+                    else ""
+                ),
+
+                status=status,
+
+                marks_obtained=(
+                    submission.marks_obtained
+                    if submission
+                    else None
+                ),
+
+                total_marks=(
+                    submission.total_marks
+                    if submission
+                    and hasattr(
+                        submission,
+                        "total_marks"
+                    )
+                    else None
+                ),
+
+                submitted_at=(
+                    submission.submitted_at.isoformat()
+                    if submission
+                    and submission.submitted_at
+                    else None
+                ),
+
+                # =================================================
+                # STUDENT SUBMISSION
+                # =================================================
+
+                submission_text=(
+                    submission.submission_text
+                    if submission
+                    else None
+                ),
+
+                teacher_remarks=(
+                    submission.teacher_remarks
+                    if submission
+                    else None
+                ),
+
+                # Original stored value
+                file_path=
+                    submission_file_path,
+
+                # Uploaded file URL/path
+                file_url=
+                    file_url,
+
+                # Uploaded file name
+                file_name=
+                    file_name,
+
+                # Keep compatibility with frontend
+                filename=
+                    file_name,
+
+                # Attachment value for frontend
+                attachment=
+                    file_url,
+
+                # Google Drive / Docs
+                drive_link=
+                    drive_link
+            )
+
+            assignment_list.append(
+                assignment_data
+            )
+
+            logger.info(
+                "[assignments/history] "
+                "assignment_id=%s, "
+                "student_id=%s, "
+                "submission_exists=%s, "
+                "submission_text=%s, "
+                "file_path=%s, "
+                "file_url=%s, "
+                "file_name=%s, "
+                "drive_link=%s",
+                assign.assignment_id,
+                student_id,
+                bool(submission),
+                submission.submission_text
+                if submission
+                else None,
+                submission_file_path,
+                file_url,
+                file_name,
+                drive_link
+            )
+
+        # =========================================================
+        # 4. FINAL LOG
+        # =========================================================
+
+        logger.info(
+            "[assignments/history] "
+            "student_id=%s → %d assignments",
+            student_id,
+            len(assignment_list)
+        )
+
+        return assignment_list
+
+    except Exception as e:
+
+        logger.exception(
+            "[assignments/history] Internal error"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+    
 @router.get("/assignments/analytics/{student_id}", response_model=AssignmentAnalyticsResponse)
 def get_assignment_analytics(student_id: int, db: Session = Depends(get_db)):
     student = db.query(StudentMaster).filter(StudentMaster.student_id == student_id).first()
@@ -168,22 +495,147 @@ def get_assignment_analytics(student_id: int, db: Session = Depends(get_db)):
     completion_pct = round((submitted + graded) / total * 100, 1) if total > 0 else 0.0
     return AssignmentAnalyticsResponse(total=total, submitted=submitted, pending=ongoing, overdue=overdue, graded=graded, completion_pct=completion_pct)
 
-@router.post("/assignments/submit", response_model=AssignmentSchema)
-def submit_assignment(
-    request: AssignmentSubmitRequest,
+# =========================================================
+# ASSIGNMENT SUBMISSION
+# =========================================================
+
+UPLOAD_DIR = Path("uploads/assignments")
+
+UPLOAD_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+ALLOWED_EXTENSIONS = {
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".jpg",
+    ".jpeg",
+    ".png",
+}
+
+MAX_FILE_SIZE = 10 * 1024 * 1024
+
+
+@router.post(
+    "/assignments/submit",
+    response_model=AssignmentSchema
+)
+async def submit_assignment(
+    assignment_id: int = Form(...),
+    student_id: int = Form(...),
+    submission_text: str = Form(...),
+
+    # Google Drive / Google Docs link
+    drive_link: str | None = Form(None),
+
+    # PDF / Word / image attachment
+    file: UploadFile | None = File(None),
+
     db: Session = Depends(get_db)
 ):
     logger.info(
         "[assignments/submit] Request received: "
-        "assignment_id=%s, student_id=%s, submission_text=%s, file_path=%s",
-        request.assignment_id,
-        request.student_id,
-        request.submission_text,
-        request.file_path
+        "assignment_id=%s, student_id=%s, "
+        "submission_text=%s, drive_link=%s, file=%s",
+        assignment_id,
+        student_id,
+        submission_text,
+        drive_link,
+        file.filename if file else None
     )
 
     try:
-        # Check whether assignment exists
+
+        # =========================================================
+        # 1. VALIDATE SUBMISSION TEXT
+        # =========================================================
+
+        submission_text = (
+            submission_text.strip()
+            if submission_text
+            else ""
+        )
+
+        if not submission_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Submission text is required."
+            )
+
+        # =========================================================
+        # 2. VALIDATE FILE / DRIVE LINK
+        # =========================================================
+
+        if file and drive_link:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Please upload a file OR provide a "
+                    "Google Drive link, not both."
+                )
+            )
+
+        allowed_extensions = {
+            ".pdf",
+            ".doc",
+            ".docx",
+            ".jpg",
+            ".jpeg",
+            ".png",
+        }
+
+        allowed_content_types = {
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "image/jpeg",
+            "image/png",
+        }
+
+        if file:
+
+            original_filename = (
+                file.filename or ""
+            ).strip()
+
+            if not original_filename:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Uploaded file has no filename."
+                )
+
+            extension = (
+                Path(original_filename)
+                .suffix
+                .lower()
+            )
+
+            if extension not in allowed_extensions:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Only PDF, DOC, DOCX, JPG, "
+                        "JPEG and PNG files are allowed."
+                    )
+                )
+
+            if (
+                file.content_type
+                and file.content_type
+                not in allowed_content_types
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Unsupported file type."
+                    )
+                )
+
+        # =========================================================
+        # 3. CHECK ASSIGNMENT
+        # =========================================================
 
         assign_row = (
             db.query(
@@ -194,18 +646,22 @@ def submit_assignment(
             )
             .join(
                 ChapterMaster,
-                AssignmentMaster.chapter_id == ChapterMaster.chapter_id
+                AssignmentMaster.chapter_id
+                == ChapterMaster.chapter_id
             )
             .join(
                 SubjectMaster,
-                ChapterMaster.subject_id == SubjectMaster.subject_id
+                ChapterMaster.subject_id
+                == SubjectMaster.subject_id
             )
             .outerjoin(
                 UsersMaster,
-                AssignmentMaster.assigned_by == UsersMaster.user_id
+                AssignmentMaster.assigned_by
+                == UsersMaster.user_id
             )
             .filter(
-                AssignmentMaster.assignment_id == request.assignment_id
+                AssignmentMaster.assignment_id
+                == assignment_id
             )
             .first()
         )
@@ -213,40 +669,192 @@ def submit_assignment(
         if not assign_row:
             raise HTTPException(
                 status_code=404,
-                detail=f"Assignment {request.assignment_id} not found"
+                detail=(
+                    f"Assignment {assignment_id} not found"
+                )
             )
 
-        assign, subject_name, chapter_name, teacher_name = assign_row
+        (
+            assign,
+            subject_name,
+            chapter_name,
+            teacher_name
+        ) = assign_row
 
-        # Check whether student exists
+        # =========================================================
+        # 4. CHECK STUDENT
+        # =========================================================
 
-        student = db.query(StudentMaster).filter(
-            StudentMaster.student_id == request.student_id
-        ).first()
+        student = (
+            db.query(StudentMaster)
+            .filter(
+                StudentMaster.student_id
+                == student_id
+            )
+            .first()
+        )
 
         if not student:
             raise HTTPException(
                 status_code=404,
-                detail=f"Student {request.student_id} not found"
+                detail=(
+                    f"Student {student_id} not found"
+                )
             )
 
-        # Check for existing submission
+        # =========================================================
+        # 5. FIND EXISTING SUBMISSION
+        # =========================================================
 
-        existing = db.query(StudentSubmission).filter(
-            StudentSubmission.assignment_id == request.assignment_id,
-            StudentSubmission.student_id == request.student_id
-        ).first()
+        existing = (
+            db.query(StudentSubmission)
+            .filter(
+                StudentSubmission.assignment_id
+                == assignment_id,
+
+                StudentSubmission.student_id
+                == student_id
+            )
+            .first()
+        )
+
+        # =========================================================
+        # 6. DETERMINE NEW FILE PATH
+        # =========================================================
+
+        new_file_path = None
+
+        if file:
+
+            # -----------------------------------------------------
+            # Read file and enforce 10 MB limit
+            # -----------------------------------------------------
+
+            max_file_size = (
+                10 * 1024 * 1024
+            )
+
+            file_content = (
+                await file.read()
+            )
+
+            if len(file_content) > max_file_size:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "File size should not exceed 10 MB."
+                    )
+                )
+
+            # -----------------------------------------------------
+            # Generate unique filename
+            #
+            # Original filename is preserved for display.
+            # UUID prevents collisions.
+            # -----------------------------------------------------
+
+            original_filename = (
+                file.filename or "attachment"
+            )
+
+            safe_filename = (
+                Path(original_filename)
+                .name
+            )
+
+            unique_filename = (
+                f"{uuid.uuid4().hex}_"
+                f"{safe_filename}"
+            )
+
+            destination = (
+                UPLOAD_ROOT /
+                unique_filename
+            )
+
+            # -----------------------------------------------------
+            # Save file
+            # -----------------------------------------------------
+
+            with open(
+                destination,
+                "wb"
+            ) as output_file:
+
+                output_file.write(
+                    file_content
+                )
+
+            # -----------------------------------------------------
+            # Store URL-style relative path
+            # -----------------------------------------------------
+
+            new_file_path = (
+                f"/uploads/assignments/"
+                f"{unique_filename}"
+            )
+
+            logger.info(
+                "[assignments/submit] "
+                "File saved: %s",
+                destination
+            )
+
+        # =========================================================
+        # 7. GOOGLE DRIVE LINK
+        # =========================================================
+
+        if drive_link:
+
+            drive_link = (
+                drive_link.strip()
+            )
+
+            if not (
+                drive_link.startswith(
+                    "https://drive.google.com/"
+                )
+                or
+                drive_link.startswith(
+                    "https://docs.google.com/"
+                )
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Please enter a valid "
+                        "Google Drive or Google Docs link."
+                    )
+                )
+
+            new_file_path = drive_link
+
+        # =========================================================
+        # 8. CREATE / UPDATE SUBMISSION
+        # =========================================================
 
         if existing:
 
             logger.info(
-                "[assignments/submit] Updating existing submission_id=%s",
+                "[assignments/submit] "
+                "Updating submission_id=%s",
                 existing.submission_id
             )
 
-            existing.submission_text = request.submission_text
-            existing.file_path = request.file_path
-            existing.submitted_at = datetime.utcnow()
+            existing.submission_text = (
+                submission_text
+            )
+
+            # Only replace the existing attachment
+            # when a new attachment/link was supplied.
+            if new_file_path:
+                existing.file_path = (
+                    new_file_path
+                )
+
+            existing.submitted_at = (
+                datetime.utcnow()
+            )
 
             db.commit()
             db.refresh(existing)
@@ -256,20 +864,26 @@ def submit_assignment(
         else:
 
             logger.info(
-                "[assignments/submit] Creating new submission"
+                "[assignments/submit] "
+                "Creating new submission"
             )
 
             sub = StudentSubmission(
-                assignment_id=request.assignment_id,
-                student_id=request.student_id,
-                submission_text=request.submission_text,
-                file_path=request.file_path,
+                assignment_id=assignment_id,
+                student_id=student_id,
+                submission_text=submission_text,
+                file_path=new_file_path,
                 submitted_at=datetime.utcnow()
             )
 
             db.add(sub)
+
             db.commit()
             db.refresh(sub)
+
+        # =========================================================
+        # 9. DETERMINE STATUS
+        # =========================================================
 
         status = (
             "Graded"
@@ -277,28 +891,131 @@ def submit_assignment(
             else "Submitted"
         )
 
+        # =========================================================
+        # 10. DETERMINE FILE RESPONSE
+        # =========================================================
+
+        file_path = sub.file_path
+
+        file_url = None
+        file_name = None
+        drive_response = None
+
+        if file_path:
+
+            if (
+                file_path.startswith(
+                    "https://drive.google.com/"
+                )
+                or
+                file_path.startswith(
+                    "https://docs.google.com/"
+                )
+            ):
+                drive_response = file_path
+
+            else:
+
+                file_url = file_path
+
+                file_name = (
+                    Path(file_path)
+                    .name
+                )
+
+                # Remove UUID prefix from display filename
+                if "_" in file_name:
+                    file_name = (
+                        file_name.split(
+                            "_",
+                            1
+                        )[1]
+                    )
+
+        # =========================================================
+        # 11. BUILD RESPONSE
+        # =========================================================
+
         response = AssignmentSchema(
-            assignment_id=assign.assignment_id,
-            assignment_title=assign.assignment_title,
-            assignment_text=assign.assignment_text,
-            subject=subject_name,
-            chapter_name=chapter_name,
-            teacher_name=teacher_name or "",
-            due_date=assign.due_date.isoformat()
-            if assign.due_date else "",
+            assignment_id=(
+                assign.assignment_id
+            ),
+
+            assignment_title=(
+                assign.assignment_title
+            ),
+
+            assignment_text=(
+                assign.assignment_text
+            ),
+
+            subject=(
+                subject_name or ""
+            ),
+
+            chapter_name=(
+                chapter_name or ""
+            ),
+
+            teacher_name=(
+                teacher_name or ""
+            ),
+
+            due_date=(
+                assign.due_date.isoformat()
+                if assign.due_date
+                else ""
+            ),
+
             status=status,
-            marks_obtained=sub.marks_obtained,
-            submitted_at=sub.submitted_at.isoformat()
-            if sub.submitted_at else None,
-            submission_text=sub.submission_text,
-            teacher_remarks=sub.teacher_remarks,
-            file_path=sub.file_path
+
+            marks_obtained=(
+                sub.marks_obtained
+            ),
+
+            total_marks=(
+                getattr(
+                    sub,
+                    "total_marks",
+                    None
+                )
+            ),
+
+            submitted_at=(
+                sub.submitted_at.isoformat()
+                if sub.submitted_at
+                else None
+            ),
+
+            submission_text=(
+                sub.submission_text
+            ),
+
+            teacher_remarks=(
+                sub.teacher_remarks
+            ),
+
+            file_path=file_path,
+
+            file_url=file_url,
+
+            file_name=file_name,
+
+            filename=file_name,
+
+            attachment=file_path,
+
+            drive_link=drive_response
         )
 
         logger.info(
-            "[assignments/submit] Success: assignment_id=%s, student_id=%s",
-            request.assignment_id,
-            request.student_id
+            "[assignments/submit] SUCCESS: "
+            "assignment_id=%s, "
+            "student_id=%s, "
+            "submission_id=%s",
+            assignment_id,
+            student_id,
+            sub.submission_id
         )
 
         return response
@@ -318,7 +1035,7 @@ def submit_assignment(
             status_code=500,
             detail=str(e)
         )
-    
+        
 @router.get("/quiz/history/{student_id}", response_model=List[QuizDetailResponse])
 def get_quiz_history(student_id: int, db: Session = Depends(get_db)):
     student = db.query(StudentMaster).filter(StudentMaster.student_id == student_id).first()

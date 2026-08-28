@@ -1,11 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from database import engine, Base, DB_PREFIX
 import models
 from routers import dashboard, translation, communication, debug, assessments
 from startup_check import run_startup_checks
 import logging
+import os
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 
@@ -30,6 +33,24 @@ with engine.connect() as _conn:
     _conn.commit()
 
 app = FastAPI(title="Parent Dashboard API")
+
+# ── Uploaded assignment files ────────────────────────────────────────────────
+# Filesystem location is configurable through environment variables.
+UPLOAD_ROOT = Path(
+    os.getenv("ASSIGNMENT_UPLOAD_ROOT", "uploads")
+)
+
+UPLOAD_ROOT.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+app.mount(
+    "/uploads",
+    StaticFiles(directory=str(UPLOAD_ROOT)),
+    name="uploads"
+)
+
 
 # Configure CORS
 app.add_middleware(
